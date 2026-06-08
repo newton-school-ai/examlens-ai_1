@@ -225,9 +225,9 @@ Closes #2
 
 ExamLens needs to track who uploaded which papers, who took which mock tests, and whose study plan is whose. The user system supports two roles: students (consume content) and contributors (upload and verify papers, earning contribution scores).
 
-Google OAuth is the primary login method because the target users are Indian college students — almost all of them have a Google account (university email or personal Gmail). No one wants to create yet another username/password. One-click Google login reduces signup friction to near zero, which matters for adoption.
+Google OAuth is the primary login method because the target users are Indian college students - almost all of them have a Google account (university email or personal Gmail). No one wants to create yet another username/password. One-click Google login reduces signup friction to near zero, which matters for adoption.
 
-The flow: student clicks "Sign in with Google" → Google consent screen → backend receives auth code → exchanges for Google profile (name, email, avatar) → creates or finds user in database → issues a JWT token for session management. JWTs are used because the frontend is a React SPA — stateless tokens avoid server-side session storage.
+The flow: student clicks "Sign in with Google" -> Google consent screen -> backend receives auth code -> exchanges for Google profile (name, email, avatar) -> creates or finds user in database -> issues a JWT token for session management. JWTs are used because the frontend is a React SPA - stateless tokens avoid server-side session storage.
 
 Exam and paper management endpoints let users organize papers by exam type and year. "Show me all GATE CS papers from 2020-2025" requires structured exam/paper relationships, not a flat file dump.
 
@@ -249,7 +249,7 @@ Google OAuth integration, JWT token issuance/validation, protected route middlew
 
 ### How this affects overall development
 
-User identity gates mock test history (#25), study plans (#26), progress tracking (#27), and contribution scores (#12). Protected routes ensure only authenticated users can upload papers or take mocks. Exam/paper organization is needed before any analysis — the frequency analyzer needs to query "all GATE CS papers from 2020-2025."
+User identity gates mock test history (#25), study plans (#26), progress tracking (#27), and contribution scores (#12). Protected routes ensure only authenticated users can upload papers or take mocks. Exam/paper organization is needed before any analysis - the frequency analyzer needs to query "all GATE CS papers from 2020-2025."
 
 ### How to test locally
 
@@ -266,7 +266,7 @@ uvicorn src.api.main:app --reload
 # 3. Start frontend
 cd frontend && npm run dev
 
-# 4. Click "Sign in with Google" → consent screen → redirected back → logged in
+# 4. Click "Sign in with Google" -> consent screen -> redirected back -> logged in
 
 # 5. Verify JWT works
 TOKEN="<jwt_from_login_response>"
@@ -288,7 +288,7 @@ curl http://localhost:8000/api/exams/1/papers
 
 ### Acceptance Criteria
 
-- [ ] Google OAuth login flow works end-to-end (click → consent → JWT → logged in)
+- [ ] Google OAuth login flow works end-to-end (click -> consent -> JWT -> logged in)
 - [ ] Backend exchanges Google auth code for user profile (name, email, avatar)
 - [ ] New users auto-created on first Google login with default role "student"
 - [ ] JWT issued on login, expires in 24 hours, refresh token for 7 days

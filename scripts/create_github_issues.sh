@@ -30,7 +30,7 @@ M6="M6: Frequency Analysis and Prediction"
 M7="M7: Mock Paper Generator and Study Planner"
 M8="M8: Dashboard, Scraper, and Demo"
 
-# ─── Helper ────────────────────────────────────────────────────────────────
+# --- Helper ----------------------------------------------------------------
 
 echo ""
 echo ">>> Creating issues..."
@@ -49,11 +49,11 @@ create_issue() {
     --milestone "$milestone" \
     --label "$labels" \
     --body "$body" > /dev/null 2>&1
-  echo "✓"
+  echo "done"
   sleep 1
 }
 
-# ─── M1 Issues (#1-4) ─────────────────────────────────────────────────────
+# --- M1 Issues (#1-4) -----------------------------------------------------
 
 create_issue 1 "Initialize repo scaffold, CI workflow, Docker setup" "$M1" "m1,infra" \
 "## Why
@@ -332,7 +332,7 @@ curl http://localhost:8000/api/exams/1/papers
 
 Closes #2"
 
-# ─── M2 Issues (#5-8) ─────────────────────────────────────────────────────
+# --- M2 Issues (#5-8) -----------------------------------------------------
 
 create_issue 5 "Build image preprocessing pipeline" "$M2" "m2,cv" \
 "## Why
@@ -550,7 +550,7 @@ pytest tests/test_math_extractor.py -v
 
 Closes #5"
 
-# ─── M3 Issues (#9-12) ────────────────────────────────────────────────────
+# --- M3 Issues (#9-12) ----------------------------------------------------
 
 create_issue 9 "Train layout detection model for question paper structure" "$M3" "m3,cv" \
 "## Why
@@ -766,7 +766,7 @@ curl http://localhost:8000/api/papers/1/ocr-review
 
 Closes #6, Closes #10"
 
-# ─── M4 Issues (#13-16) ───────────────────────────────────────────────────
+# --- M4 Issues (#13-16) ---------------------------------------------------
 
 create_issue 13 "Build syllabus ingestion system" "$M4" "m4,agent" \
 "## Why
@@ -979,7 +979,7 @@ pytest tests/test_deduplicator.py -v
 
 Closes #14"
 
-# ─── M5 Issues (#17-20) ───────────────────────────────────────────────────
+# --- M5 Issues (#17-20) ---------------------------------------------------
 
 create_issue 17 "Build answer generator agent" "$M5" "m5,agent" \
 "## Why
@@ -1207,7 +1207,7 @@ cd frontend && npm install && npm run dev
 
 Closes #17"
 
-# ─── M6 Issues (#21-23) ───────────────────────────────────────────────────
+# --- M6 Issues (#21-23) ---------------------------------------------------
 
 create_issue 21 "Build topic frequency analyzer with trend detection" "$M6" "m6,analytics" \
 "## Why
@@ -1366,7 +1366,7 @@ curl \"http://localhost:8000/api/analytics/export?exam_id=1&format=json\" > anal
 
 Closes #21"
 
-# ─── M7 Issues (#24-27) ───────────────────────────────────────────────────
+# --- M7 Issues (#24-27) ---------------------------------------------------
 
 create_issue 24 "Build mock paper generator agent" "$M7" "m7,agent" \
 "## Why
@@ -1590,7 +1590,7 @@ pytest tests/test_progress_tracker.py -v
 
 Closes #25"
 
-# ─── M8 Issues (#28-30) ───────────────────────────────────────────────────
+# --- M8 Issues (#28-30) ---------------------------------------------------
 
 create_issue 28 "Build PYQ scraper agent" "$M8" "m8,scraper,agent" \
 "## Why

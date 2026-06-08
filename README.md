@@ -10,19 +10,19 @@ Built by a 5-student pod at Newton School of Technology.
 
 ## Why ExamLens? (What ChatGPT/Claude Can't Do)
 
-ChatGPT or Claude can answer one question at a time — but they forget everything next conversation. ExamLens is a **system** that accumulates data, finds patterns, and gets smarter the more papers it processes.
+ChatGPT or Claude can answer one question at a time - but they forget everything next conversation. ExamLens is a **system** that accumulates data, finds patterns, and gets smarter the more papers it processes.
 
-**Persistent memory across papers** — ExamLens builds a searchable database across 100+ papers spanning 10+ years. Every question, topic, and year is stored and queryable.
+**Persistent memory across papers** - ExamLens builds a searchable database across 100+ papers spanning 10+ years. Every question, topic, and year is stored and queryable.
 
-**ML-powered pattern detection & prediction** — "Binary Trees appeared in GATE 2018-2020, skipped 2021, came back 2022-2024 with increasing marks → 92% chance of appearing in 2025." No chatbot tracks this. ExamLens uses linear regression for rising/falling trends, standard deviation analysis for stable topics, autocorrelation for cyclic patterns (topics that appear every 2-3 years), and gap analysis (absent high-frequency topics get boosted). These statistical signals feed into a multi-factor importance scorer that ranks every topic by predicted probability.
+**ML-powered pattern detection & prediction** - "Binary Trees appeared in GATE 2018-2020, skipped 2021, came back 2022-2024 with increasing marks -> 92% chance of appearing in 2025." No chatbot tracks this. ExamLens uses linear regression for rising/falling trends, standard deviation analysis for stable topics, autocorrelation for cyclic patterns (topics that appear every 2-3 years), and gap analysis (absent high-frequency topics get boosted). These statistical signals feed into a multi-factor importance scorer that ranks every topic by predicted probability.
 
-**Personalized to your weaknesses** — Claude gives the same study plan to everyone. ExamLens knows *you* scored 30% on Graph Algorithms across 3 mocks but 90% on Arrays. Your study plan adapts after every mock test.
+**Personalized to your weaknesses** - Claude gives the same study plan to everyone. ExamLens knows *you* scored 30% on Graph Algorithms across 3 mocks but 90% on Arrays. Your study plan adapts after every mock test.
 
-**Realistic mock tests from real questions** — ChatGPT invents random questions. ExamLens pulls actual PYQ questions, matches the exact exam pattern (GATE: 65 questions, 100 marks, correct topic distribution), and grades you instantly.
+**Realistic mock tests from real questions** - ChatGPT invents random questions. ExamLens pulls actual PYQ questions, matches the exact exam pattern (GATE: 65 questions, 100 marks, correct topic distribution), and grades you instantly.
 
-**Automatic paper collection** — No googling for PDFs on sketchy sites. The Playwright-based scraper fetches papers directly from official exam portals, OCRs them, and makes every question searchable.
+**Automatic paper collection** - No googling for PDFs on sketchy sites. The Playwright-based scraper fetches papers directly from official exam portals, OCRs them, and makes every question searchable.
 
-**Visual analytics** — Topic-year heatmaps, trend charts, marks distribution, and prediction rankings across 10+ years of papers. You can't get this from a chat prompt.
+**Visual analytics** - Topic-year heatmaps, trend charts, marks distribution, and prediction rankings across 10+ years of papers. You can't get this from a chat prompt.
 
 ---
 
