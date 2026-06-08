@@ -1,0 +1,36 @@
+# Environment
+.env
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Data (too large for git)
+data/sample_papers/*.pdf
+data/syllabus/*.pdf
+models/weights/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Internal planning docs
+_internal/
+
+# Notebooks checkpoints
+.ipynb_checkpoints/
