@@ -1,6 +1,7 @@
 """ExamLens AI configuration."""
 
 from enum import Enum
+
 from pydantic_settings import BaseSettings
 
 
