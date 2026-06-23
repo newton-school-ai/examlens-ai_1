@@ -1,4 +1,4 @@
-"""Placeholder test to prevent pytest from exiting with code 5 (no tests collected)."""
+"""Placeholder test to prevent pytest from exiting with code 5."""
 
 
 def test_placeholder():
