@@ -19,21 +19,9 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from src.models import (
-    Base,
-    ConfidenceLevel,
-    Exam,
-    ExamType,
-    MockTest,
-    Paper,
-    Question,
-    QuestionType,
-    Solution,
-    StudyPlan,
-    Topic,
-    User,
-    UserRole,
-)
+from src.models import (Base, ConfidenceLevel, Exam, ExamType, MockTest, Paper,
+                        Question, QuestionType, Solution, StudyPlan, Topic,
+                        User, UserRole)
 
 # ---------------------------------------------------------------------------
 # Engine / Session fixtures
