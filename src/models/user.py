@@ -33,14 +33,22 @@ class User(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
 
     # Identity - sourced from Google OAuth
-    email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
+    email: Mapped[str] = mapped_column(
+        String(255), unique=True, index=True, nullable=False
+    )
     full_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    google_id: Mapped[Optional[str]] = mapped_column(String(128), unique=True, index=True, nullable=True)
+    google_id: Mapped[Optional[str]] = mapped_column(
+        String(128), unique=True, index=True, nullable=True
+    )
     avatar_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
 
     # Access control
     role: Mapped[UserRole] = mapped_column(
-        Enum(UserRole, name="userrole", values_callable=lambda obj: [e.value for e in obj]),
+        Enum(
+            UserRole,
+            name="userrole",
+            values_callable=lambda obj: [e.value for e in obj],
+        ),
         default=UserRole.STUDENT,
         nullable=False,
     )

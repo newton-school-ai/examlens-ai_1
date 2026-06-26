@@ -37,7 +37,12 @@ class Exam(Base):
 
     name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     exam_type: Mapped[ExamType] = mapped_column(
-        Enum(ExamType, name="examtype", values_callable=lambda obj: [e.value for e in obj]), nullable=False
+        Enum(
+            ExamType,
+            name="examtype",
+            values_callable=lambda obj: [e.value for e in obj],
+        ),
+        nullable=False,
     )
     year: Mapped[int] = mapped_column(Integer, nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

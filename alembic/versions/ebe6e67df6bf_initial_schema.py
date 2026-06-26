@@ -68,7 +68,14 @@ def upgrade() -> None:
         sa.Column("name", sa.String(255), nullable=False),
         sa.Column(
             "exam_type",
-            sa.Enum("gate", "jee_mains", "jee_advanced", "university", "other", name="examtype"),
+            sa.Enum(
+                "gate",
+                "jee_mains",
+                "jee_advanced",
+                "university",
+                "other",
+                name="examtype",
+            ),
             nullable=False,
         ),
         sa.Column("year", sa.Integer(), nullable=False),
@@ -125,7 +132,9 @@ def upgrade() -> None:
         sa.Column("page_count", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("original_filename", sa.String(255), nullable=True),
         sa.Column("file_size_bytes", sa.Integer(), nullable=True),
-        sa.Column("ocr_status", sa.String(32), nullable=False, server_default="pending"),
+        sa.Column(
+            "ocr_status", sa.String(32), nullable=False, server_default="pending"
+        ),
         sa.Column("notes", sa.Text(), nullable=True),
         sa.Column("exam_id", sa.Integer(), nullable=False),
         sa.Column(
@@ -156,14 +165,21 @@ def upgrade() -> None:
         sa.Column(
             "question_type",
             sa.Enum(
-                "mcq", "numerical", "subjective", "fill_in_blank", "match", "unknown",
+                "mcq",
+                "numerical",
+                "subjective",
+                "fill_in_blank",
+                "match",
+                "unknown",
                 name="questiontype",
             ),
             nullable=False,
             server_default="unknown",
         ),
         sa.Column("options_json", sa.Text(), nullable=True),
-        sa.Column("is_sub_question", sa.Boolean(), nullable=False, server_default="false"),
+        sa.Column(
+            "is_sub_question", sa.Boolean(), nullable=False, server_default="false"
+        ),
         sa.Column("parent_question_id", sa.Integer(), nullable=True),
         sa.Column("year", sa.Integer(), nullable=True),
         sa.Column("ocr_confidence", sa.Float(), nullable=True),
@@ -228,9 +244,7 @@ def upgrade() -> None:
         "question_topics",
         sa.Column("question_id", sa.Integer(), nullable=False),
         sa.Column("topic_id", sa.Integer(), nullable=False),
-        sa.ForeignKeyConstraint(
-            ["question_id"], ["questions.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["question_id"], ["questions.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["topic_id"], ["topics.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("question_id", "topic_id"),
     )

@@ -32,7 +32,9 @@ class StudyPlan(Base):
 
     # Target exam context
     target_exam_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    exam_date: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    exam_date: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     total_days: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     # User inputs used to generate the plan

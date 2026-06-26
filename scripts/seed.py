@@ -47,6 +47,7 @@ DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://localhost/examlens_d
 # Helper
 # ---------------------------------------------------------------------------
 
+
 def get_or_create(session: Session, model, filters: dict, defaults: dict | None = None):
     """Fetch an existing row matching *filters* or create a new one.
 
@@ -67,6 +68,7 @@ def get_or_create(session: Session, model, filters: dict, defaults: dict | None 
 # ---------------------------------------------------------------------------
 # Seed functions
 # ---------------------------------------------------------------------------
+
 
 def seed_users(session: Session) -> list[User]:
     users_data = [
@@ -159,7 +161,10 @@ def seed_topics(session: Session, exams: list[Exam]) -> list[Topic]:
         session,
         Topic,
         {"name": "Linked Lists", "exam_id": gate_exam.id, "depth": 1},
-        {"description": "Singly, doubly, and circular linked lists", "parent_id": gate_unit.id},
+        {
+            "description": "Singly, doubly, and circular linked lists",
+            "parent_id": gate_unit.id,
+        },
     )
     gate_subtopic, _ = get_or_create(
         session,
@@ -188,7 +193,14 @@ def seed_topics(session: Session, exams: list[Exam]) -> list[Topic]:
         {"parent_id": jee_topic.id},
     )
 
-    all_topics = [gate_unit, gate_topic, gate_subtopic, jee_unit, jee_topic, jee_subtopic]
+    all_topics = [
+        gate_unit,
+        gate_topic,
+        gate_subtopic,
+        jee_unit,
+        jee_topic,
+        jee_subtopic,
+    ]
     for t in all_topics:
         print(f"  Topic: {t.name} (depth={t.depth})")
     return all_topics
@@ -244,19 +256,21 @@ def seed_papers(session: Session, exams: list[Exam]) -> list[Paper]:
     return papers
 
 
-def seed_questions(session: Session, papers: list[Paper], topics: list[Topic]) -> list[Question]:
+def seed_questions(
+    session: Session, papers: list[Paper], topics: list[Topic]
+) -> list[Question]:
     gate_paper = papers[0]
     jee_paper = papers[1]
-    gate_subtopic = topics[2]   # Doubly Linked List
-    jee_subtopic = topics[5]    # Integration
+    gate_subtopic = topics[2]  # Doubly Linked List
+    jee_subtopic = topics[5]  # Integration
 
     questions_data = [
         dict(
             text="Which of the following is correct about doubly linked lists?\n"
-                 "(A) Each node has one pointer\n"
-                 "(B) Each node has two pointers: next and prev\n"
-                 "(C) Traversal is only forward\n"
-                 "(D) Insertion at head takes O(n)",
+            "(A) Each node has one pointer\n"
+            "(B) Each node has two pointers: next and prev\n"
+            "(C) Traversal is only forward\n"
+            "(D) Insertion at head takes O(n)",
             question_number=1,
             paper_id=gate_paper.id,
             defaults=dict(
@@ -271,7 +285,7 @@ def seed_questions(session: Session, papers: list[Paper], topics: list[Topic]) -
         ),
         dict(
             text="The time complexity of deleting a node from the middle of a doubly linked list, "
-                 "given a pointer to that node, is:",
+            "given a pointer to that node, is:",
             question_number=2,
             paper_id=gate_paper.id,
             defaults=dict(
@@ -347,11 +361,13 @@ def seed_solutions(session: Session, questions: list[Question]) -> list[Solution
             question_id=questions[0].id,
             defaults=dict(
                 answer="B",
-                steps_json=json.dumps([
-                    "A doubly linked list node stores data, a *next* pointer, and a *prev* pointer.",
-                    "This allows O(1) bidirectional traversal.",
-                    "Correct answer: B.",
-                ]),
+                steps_json=json.dumps(
+                    [
+                        "A doubly linked list node stores data, a *next* pointer, and a *prev* pointer.",
+                        "This allows O(1) bidirectional traversal.",
+                        "Correct answer: B.",
+                    ]
+                ),
                 explanation="Each node in a DLL has two pointers: `next` (forward) and `prev` (backward).",
                 confidence=ConfidenceLevel.HIGH,
                 confidence_score=0.98,
@@ -364,10 +380,12 @@ def seed_solutions(session: Session, questions: list[Question]) -> list[Solution
             question_id=questions[1].id,
             defaults=dict(
                 answer="O(1)",
-                steps_json=json.dumps([
-                    "Given a pointer to the node, we can directly update prev.next and next.prev.",
-                    "No traversal is needed, so time complexity is O(1).",
-                ]),
+                steps_json=json.dumps(
+                    [
+                        "Given a pointer to the node, we can directly update prev.next and next.prev.",
+                        "No traversal is needed, so time complexity is O(1).",
+                    ]
+                ),
                 explanation="With a direct pointer, re-linking neighbours is O(1).",
                 confidence=ConfidenceLevel.HIGH,
                 confidence_score=0.99,
@@ -380,10 +398,12 @@ def seed_solutions(session: Session, questions: list[Question]) -> list[Solution
             question_id=questions[2].id,
             defaults=dict(
                 answer="1/3",
-                steps_json=json.dumps([
-                    r"$\int_0^1 x^2 \,dx = \left[\frac{x^3}{3}\right]_0^1$",
-                    r"$= \frac{1}{3} - 0 = \frac{1}{3}$",
-                ]),
+                steps_json=json.dumps(
+                    [
+                        r"$\int_0^1 x^2 \,dx = \left[\frac{x^3}{3}\right]_0^1$",
+                        r"$= \frac{1}{3} - 0 = \frac{1}{3}$",
+                    ]
+                ),
                 explanation=r"Apply the power rule: $\int x^n dx = \frac{x^{n+1}}{n+1} + C$.",
                 confidence=ConfidenceLevel.HIGH,
                 confidence_score=0.99,
@@ -395,11 +415,13 @@ def seed_solutions(session: Session, questions: list[Question]) -> list[Solution
             question_id=questions[3].id,
             defaults=dict(
                 answer="1/6",
-                steps_json=json.dumps([
-                    r"Intersection points: $x^2 = x \Rightarrow x = 0, 1$",
-                    r"Area $= \int_0^1 (x - x^2)\,dx$",
-                    r"$= \left[\frac{x^2}{2} - \frac{x^3}{3}\right]_0^1 = \frac{1}{2} - \frac{1}{3} = \frac{1}{6}$",
-                ]),
+                steps_json=json.dumps(
+                    [
+                        r"Intersection points: $x^2 = x \Rightarrow x = 0, 1$",
+                        r"Area $= \int_0^1 (x - x^2)\,dx$",
+                        r"$= \left[\frac{x^2}{2} - \frac{x^3}{3}\right]_0^1 = \frac{1}{2} - \frac{1}{3} = \frac{1}{6}$",
+                    ]
+                ),
                 explanation=r"Subtract the lower curve from the upper curve and integrate.",
                 confidence=ConfidenceLevel.MEDIUM,
                 confidence_score=0.87,
@@ -419,11 +441,15 @@ def seed_solutions(session: Session, questions: list[Question]) -> list[Solution
         )
         solutions.append(sol)
         status = "created" if created else "exists"
-        print(f"  Solution [{status}]: question_id={sol.question_id} confidence={sol.confidence}")
+        print(
+            f"  Solution [{status}]: question_id={sol.question_id} confidence={sol.confidence}"
+        )
     return solutions
 
 
-def seed_mock_tests(session: Session, users: list[User], questions: list[Question]) -> list[MockTest]:
+def seed_mock_tests(
+    session: Session, users: list[User], questions: list[Question]
+) -> list[MockTest]:
     student = users[0]  # Alice
     mock, created = get_or_create(
         session,
@@ -435,7 +461,9 @@ def seed_mock_tests(session: Session, users: list[User], questions: list[Questio
             duration_minutes=30,
             score=3.0,
             max_score=3.0,
-            answers_json=json.dumps({str(questions[0].id): "B", str(questions[1].id): "O(1)"}),
+            answers_json=json.dumps(
+                {str(questions[0].id): "B", str(questions[1].id): "O(1)"}
+            ),
         ),
     )
     status = "created" if created else "exists"
@@ -455,10 +483,12 @@ def seed_study_plans(session: Session, users: list[User]) -> list[StudyPlan]:
             available_hours_per_day=3.0,
             weak_topics_json=json.dumps(["Data Structures", "Algorithms"]),
             is_active=True,
-            daily_plan_json=json.dumps([
-                {"day": 1, "topics": ["Arrays", "Linked Lists"], "hours": 3},
-                {"day": 2, "topics": ["Stacks", "Queues"], "hours": 3},
-            ]),
+            daily_plan_json=json.dumps(
+                [
+                    {"day": 1, "topics": ["Arrays", "Linked Lists"], "hours": 3},
+                    {"day": 2, "topics": ["Stacks", "Queues"], "hours": 3},
+                ]
+            ),
         ),
     )
     status = "created" if created else "exists"
@@ -469,6 +499,7 @@ def seed_study_plans(session: Session, users: list[User]) -> list[StudyPlan]:
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def main() -> None:
     print(f"Connecting to: {DATABASE_URL}\n")

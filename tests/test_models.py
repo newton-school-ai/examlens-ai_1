@@ -73,8 +73,13 @@ def session(engine):
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def make_user(session: Session, email: str = "test@example.com", **kwargs) -> User:
-    u = User(email=email, role=kwargs.get("role", UserRole.STUDENT), **{k: v for k, v in kwargs.items() if k != "role"})
+    u = User(
+        email=email,
+        role=kwargs.get("role", UserRole.STUDENT),
+        **{k: v for k, v in kwargs.items() if k != "role"}
+    )
     session.add(u)
     session.flush()
     return u
@@ -94,7 +99,9 @@ def make_paper(session: Session, exam: Exam, pdf_path: str = "test.pdf") -> Pape
     return p
 
 
-def make_question(session: Session, paper: Paper, text: str = "What is 2+2?", number: int = 1) -> Question:
+def make_question(
+    session: Session, paper: Paper, text: str = "What is 2+2?", number: int = 1
+) -> Question:
     q = Question(
         text=text,
         question_number=number,
@@ -119,7 +126,9 @@ def make_solution(session: Session, question: Question) -> Solution:
     return s
 
 
-def make_topic(session: Session, exam: Exam, name: str = "Algorithms", depth: int = 0) -> Topic:
+def make_topic(
+    session: Session, exam: Exam, name: str = "Algorithms", depth: int = 0
+) -> Topic:
     t = Topic(name=name, depth=depth, exam_id=exam.id)
     session.add(t)
     session.flush()
@@ -129,6 +138,7 @@ def make_topic(session: Session, exam: Exam, name: str = "Algorithms", depth: in
 # ===========================================================================
 # 1. Model creation tests
 # ===========================================================================
+
 
 class TestModelCreation:
     """Verify each model can be created with its minimum required fields."""
@@ -209,7 +219,9 @@ class TestModelCreation:
         topic = Topic(name="Calculus", depth=1, exam_id=exam.id, parent_id=unit.id)
         session.add(topic)
         session.flush()
-        subtopic = Topic(name="Integration", depth=2, exam_id=exam.id, parent_id=topic.id)
+        subtopic = Topic(
+            name="Integration", depth=2, exam_id=exam.id, parent_id=topic.id
+        )
         session.add(subtopic)
         session.flush()
         assert subtopic.id is not None
@@ -240,6 +252,7 @@ class TestModelCreation:
 # ===========================================================================
 # 2. Relationship tests
 # ===========================================================================
+
 
 class TestRelationships:
     """Verify ORM relationships resolve to the correct objects."""
@@ -345,6 +358,7 @@ class TestRelationships:
 # ===========================================================================
 # 3. Constraint tests
 # ===========================================================================
+
 
 class TestConstraints:
     """Verify NOT NULL and UNIQUE database constraints are enforced."""

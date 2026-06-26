@@ -37,8 +37,12 @@ class MockTest(Base):
 
     # Timing
     duration_minutes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    submitted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    started_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    submitted_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     # Grading
     score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)

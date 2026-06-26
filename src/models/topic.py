@@ -17,8 +17,18 @@ if TYPE_CHECKING:
 question_topics = Table(
     "question_topics",
     Base.metadata,
-    Column("question_id", Integer, ForeignKey("questions.id", ondelete="CASCADE"), primary_key=True),
-    Column("topic_id", Integer, ForeignKey("topics.id", ondelete="CASCADE"), primary_key=True),
+    Column(
+        "question_id",
+        Integer,
+        ForeignKey("questions.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "topic_id",
+        Integer,
+        ForeignKey("topics.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
 )
 
 

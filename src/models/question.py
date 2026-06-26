@@ -43,7 +43,11 @@ class Question(Base):
     marks: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     negative_marks: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     question_type: Mapped[QuestionType] = mapped_column(
-        Enum(QuestionType, name="questiontype", values_callable=lambda obj: [e.value for e in obj]),
+        Enum(
+            QuestionType,
+            name="questiontype",
+            values_callable=lambda obj: [e.value for e in obj],
+        ),
         default=QuestionType.UNKNOWN,
         nullable=False,
     )

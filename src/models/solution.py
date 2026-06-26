@@ -16,9 +16,9 @@ if TYPE_CHECKING:
 class ConfidenceLevel(str, enum.Enum):
     """Confidence tier for a generated solution."""
 
-    HIGH = "high"      # Verified against official answer key
+    HIGH = "high"  # Verified against official answer key
     MEDIUM = "medium"  # LLM is confident but not externally verified
-    LOW = "low"        # Uncertain / flagged for review
+    LOW = "low"  # Uncertain / flagged for review
 
 
 class Solution(Base):
@@ -41,7 +41,11 @@ class Solution(Base):
 
     # Quality signals
     confidence: Mapped[ConfidenceLevel] = mapped_column(
-        Enum(ConfidenceLevel, name="confidencelevel", values_callable=lambda obj: [e.value for e in obj]),
+        Enum(
+            ConfidenceLevel,
+            name="confidencelevel",
+            values_callable=lambda obj: [e.value for e in obj],
+        ),
         default=ConfidenceLevel.MEDIUM,
         nullable=False,
     )
