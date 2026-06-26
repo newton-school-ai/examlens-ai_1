@@ -1,7 +1,8 @@
 """ExamLens AI pipeline orchestrator."""
 
 # TODO: Issue 17 - Implement LangGraph supervisor
-# Orchestrates: OCR -> Parsing -> Topic Tagging -> Answer Generation -> Analysis
+# Orchestrates: OCR -> Parsing -> Topic Tagging -> Answer Generation ->
+# Analysis
 
 
 def main():
