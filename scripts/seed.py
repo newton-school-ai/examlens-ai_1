@@ -25,9 +25,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from sqlalchemy import create_engine, select  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
-from src.models import (ConfidenceLevel, Exam, ExamType,  # noqa: E402
-                        MockTest, Paper, Question, QuestionType, Solution,
-                        StudyPlan, Topic, User, UserRole)
+from src.models import ExamType  # noqa: E402
+from src.models import (
+    ConfidenceLevel,
+    Exam,
+    MockTest,
+    Paper,
+    Question,
+    QuestionType,
+    Solution,
+    StudyPlan,
+    Topic,
+    User,
+    UserRole,
+)
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://localhost/examlens_dev")
 

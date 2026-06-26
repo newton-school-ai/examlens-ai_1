@@ -3,8 +3,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import (Column, DateTime, ForeignKey, Integer, String, Table,
-                        Text, func)
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Table, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.models.base import Base
