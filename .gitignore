@@ -34,3 +34,6 @@ _internal/
 
 # Notebooks checkpoints
 .ipynb_checkpoints/
+
+# Local dev database
+*.db
