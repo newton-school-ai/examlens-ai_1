@@ -41,6 +41,9 @@ class User(Base):
         String(128), unique=True, index=True, nullable=True
     )
     avatar_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    auth_provider: Mapped[Optional[str]] = mapped_column(
+        String(50), default="google", nullable=True
+    )
 
     # Access control
     role: Mapped[UserRole] = mapped_column(

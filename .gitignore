@@ -14,6 +14,7 @@ build/
 # Data (too large for git)
 data/sample_papers/*.pdf
 data/syllabus/*.pdf
+data/papers/
 models/weights/
 
 # Frontend
@@ -37,3 +38,6 @@ _internal/
 
 # Local dev database
 *.db
+
+# Local development copy
+examlens-ai_1/
