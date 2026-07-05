@@ -3,6 +3,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from src.api.routes import auth, papers, upload, users
+
 app = FastAPI(
     title="ExamLens AI",
     description="PYQ analysis, answer generation, and exam preparation",
@@ -21,3 +23,10 @@ app.add_middleware(
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "examlens-ai"}
+
+
+# Register endpoints
+app.include_router(auth.router, prefix="/api")
+app.include_router(users.router, prefix="/api")
+app.include_router(papers.router, prefix="/api")
+app.include_router(upload.router, prefix="/api")
