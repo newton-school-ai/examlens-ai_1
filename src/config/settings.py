@@ -68,6 +68,18 @@ class Settings(BaseSettings):
     answer_temperature: float = 0.3
     verification_sources: int = 2  # number of sources to cross-check
 
+    # Google OAuth
+    google_client_id: str = ""
+    google_client_secret: str = ""
+
+    # JWT
+    jwt_secret_key: str = "supersecretjwtkey"
+    jwt_access_token_expire_minutes: int = 1440
+    jwt_refresh_token_expire_days: int = 7
+
+    # Storage
+    data_dir: str = "data"
+
     # Server
     host: str = "0.0.0.0"
     port: int = 8000
