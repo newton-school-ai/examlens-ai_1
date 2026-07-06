@@ -59,7 +59,6 @@ def denoise(image: np.ndarray, h: int = 10) -> np.ndarray:
         return cv2.fastNlMeansDenoisingColored(image, None, h, h)
     return cv2.fastNlMeansDenoising(image, None, h)
 
-
 def binarize(image: np.ndarray, block_size: int = 11, C: int = 2) -> np.ndarray:
     """Convert image to pure black-and-white using adaptive thresholding.
 
