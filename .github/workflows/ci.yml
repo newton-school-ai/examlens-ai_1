@@ -24,7 +24,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           # Fallback install for dev tools in case they aren't in requirements.txt
-          pip install black isort flake8 pytest
+          pip install black==24.3.0 isort flake8 pytest
 
       - name: Check formatting with black
         run: black --check .

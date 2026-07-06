@@ -78,7 +78,7 @@ def make_user(session: Session, email: str = "test@example.com", **kwargs) -> Us
     u = User(
         email=email,
         role=kwargs.get("role", UserRole.STUDENT),
-        **{k: v for k, v in kwargs.items() if k != "role"}
+        **{k: v for k, v in kwargs.items() if k != "role"},
     )
     session.add(u)
     session.flush()

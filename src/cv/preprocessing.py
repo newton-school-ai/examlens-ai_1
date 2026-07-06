@@ -24,20 +24,21 @@ def deskew(image: np.ndarray) -> np.ndarray:
 
     if lines is not None:
         # Only use near-horizontal lines to avoid 90-degree flips from margins
-        angles = [
-            np.degrees(np.arctan2(y2 - y1, x2 - x1))
-            for line in lines
-            for x1, y1, x2, y2 in line
-            if -45 <= np.degrees(np.arctan2(y2 - y1, x2 - x1)) <= 45
-        ]
+        angles = []
+        for x1, y1, x2, y2 in lines.reshape(-1, 4):
+            angle_deg = np.degrees(np.arctan2(y2 - y1, x2 - x1))
+            if -45 <= angle_deg <= 45:
+                angles.append(angle_deg)
         if angles:
             angle = np.median(angles)
     else:
         # Fallback: compute angle from bounding box of all text pixels
         _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
-        coords = np.column_stack(np.where(thresh > 0))
-        if len(coords) > 0:
-            rect_angle = cv2.minAreaRect(coords)[-1]
+        contours = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)[
+            -2
+        ]
+        if contours:
+            rect_angle = cv2.minAreaRect(contours[0])[-1]
             angle = -(90 + rect_angle) if rect_angle < -45 else -rect_angle
 
     if abs(angle) < 0.1:
@@ -58,6 +59,7 @@ def denoise(image: np.ndarray, h: int = 10) -> np.ndarray:
     if len(image.shape) == 3:
         return cv2.fastNlMeansDenoisingColored(image, None, h, h)
     return cv2.fastNlMeansDenoising(image, None, h)
+
 
 def binarize(image: np.ndarray, block_size: int = 11, C: int = 2) -> np.ndarray:
     """Convert image to pure black-and-white using adaptive thresholding.
