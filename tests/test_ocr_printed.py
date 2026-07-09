@@ -1,8 +1,11 @@
+# fmt: off
+# isort: skip_file
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from src.cv.ocr_printed import OCRResult, extract_text_printed, post_process_text
+# fmt: on
 
 
 @pytest.fixture

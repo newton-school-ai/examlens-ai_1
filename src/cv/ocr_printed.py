@@ -1,5 +1,7 @@
 """Printed text OCR using Tesseract and EasyOCR."""
 
+# fmt: off
+# isort: skip_file
 import re
 from typing import Any, Dict, List
 
@@ -8,6 +10,7 @@ import easyocr
 import pytesseract
 from pydantic import BaseModel
 from pytesseract import Output
+# fmt: on
 
 # Initialize EasyOCR reader lazily to avoid loading models if not needed
 _easyocr_reader = None
