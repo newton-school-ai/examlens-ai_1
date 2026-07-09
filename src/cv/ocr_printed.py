@@ -1,7 +1,5 @@
 """Printed text OCR using Tesseract and EasyOCR."""
 
-# isort: skip_file
-
 import re
 from typing import Any, Dict, List
 

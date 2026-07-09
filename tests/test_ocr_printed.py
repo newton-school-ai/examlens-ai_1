@@ -1,4 +1,3 @@
-# isort: skip_file
 from unittest.mock import MagicMock, patch
 
 import pytest
