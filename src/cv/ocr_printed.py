@@ -1,12 +1,13 @@
 """Printed text OCR using Tesseract and EasyOCR."""
 
 import re
-from pydantic import BaseModel
-from typing import List, Dict, Any
-import pytesseract
-from pytesseract import Output
-import easyocr
+from typing import Any, Dict, List
+
 import cv2
+import easyocr
+import pytesseract
+from pydantic import BaseModel
+from pytesseract import Output
 
 # Initialize EasyOCR reader lazily to avoid loading models if not needed
 _easyocr_reader = None

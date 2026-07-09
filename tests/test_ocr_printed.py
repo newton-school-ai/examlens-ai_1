@@ -1,6 +1,8 @@
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
-from src.cv.ocr_printed import extract_text_printed, post_process_text, OCRResult
+
+from src.cv.ocr_printed import OCRResult, extract_text_printed, post_process_text
 
 
 @pytest.fixture
