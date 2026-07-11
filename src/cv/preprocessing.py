@@ -44,7 +44,7 @@ def deskew(image: np.ndarray) -> np.ndarray:
     if abs(angle) < 0.1:
         return image
 
-    (h, w) = image.shape[:2]
+    h, w = image.shape[:2]
     M = cv2.getRotationMatrix2D((w // 2, h // 2), angle, 1.0)
     return cv2.warpAffine(image, M, (w, h), borderMode=cv2.BORDER_REPLICATE)
 
