@@ -1,5 +1,8 @@
+import time
+
 import cv2
 import numpy as np
+import pytest
 
 from src.cv.preprocessing import (
     apply_clahe,
@@ -30,13 +33,10 @@ def test_deskew():
     # The straightened image should match the original closely
     gray = cv2.cvtColor(straightened, cv2.COLOR_BGR2GRAY)
     _, thresh = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY_INV)
-    contours = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)[-2]
-
-    assert len(contours) > 0, "No contours found after deskew"
-    angle = cv2.minAreaRect(contours[0])[-1]
-
-    # After deskewing, angle should be reduced (deskew is best-effort on synthetic images)
-    assert abs(angle) < 45.0, f"Deskew produced unexpected angle: {angle}"
+    points = np.column_stack(np.where(thresh > 0))[:, ::-1].astype(np.float32)
+    angle = cv2.minAreaRect(points)[-1]
+    normalized = angle + 90 if angle <= -45 else angle - 90 if angle > 45 else angle
+    assert abs(normalized) < 1.0, f"Deskew left {normalized:.2f} degrees of skew"
 
 
 def test_binarize():
@@ -67,8 +67,8 @@ def test_denoise_and_contrast():
     img = create_synthetic_image()
 
     # Add Gaussian noise
-    noise = np.random.normal(0, 25, img.shape).astype(np.uint8)
-    noisy = cv2.add(img, noise)
+    noise = np.random.normal(0, 25, img.shape)
+    noisy = np.clip(img.astype(np.float32) + noise, 0, 255).astype(np.uint8)
 
     denoised = denoise(noisy)
     enhanced = apply_clahe(denoised)
@@ -78,6 +78,11 @@ def test_denoise_and_contrast():
     # apply_clahe converts to grayscale — output is 2D (H, W)
     assert enhanced.shape == denoised.shape[:2]
     assert enhanced.dtype == np.uint8
+    noisy_gray = cv2.cvtColor(noisy, cv2.COLOR_BGR2GRAY)
+    denoised_gray = cv2.cvtColor(denoised, cv2.COLOR_BGR2GRAY)
+    # A blank background region should become more uniform while the text remains dark.
+    assert np.std(denoised_gray[:50, :]) < np.std(noisy_gray[:50, :])
+    assert np.mean(denoised_gray[85:115, 60:140]) < 40
 
 
 def test_full_pipeline():
@@ -95,3 +100,31 @@ def test_full_pipeline():
     # Should only contain black (0) and white (255) pixels
     unique_vals = np.unique(result)
     assert set(unique_vals).issubset({0, 255})
+
+
+def test_pipeline_steps_can_be_disabled():
+    img = create_synthetic_image()
+    result = preprocess_image(
+        img,
+        do_deskew=False,
+        do_denoise=False,
+        do_binarize=False,
+        do_clahe=False,
+    )
+    assert np.array_equal(result, img)
+    assert result is not img
+
+
+def test_binarize_rejects_invalid_block_size():
+    with pytest.raises(ValueError, match="odd integer"):
+        binarize(np.ones((20, 20), dtype=np.uint8), block_size=10)
+
+
+def test_pipeline_completes_under_one_second_on_sample_page():
+    page = np.ones((800, 600, 3), dtype=np.uint8) * 255
+    for y in range(60, 760, 50):
+        cv2.putText(page, "ExamLens question text", (30, y), 0, 0.7, (0, 0, 0), 2)
+    started = time.perf_counter()
+    result = preprocess_image(page)
+    assert time.perf_counter() - started < 1.0
+    assert result.shape == page.shape[:2]

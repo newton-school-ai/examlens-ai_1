@@ -12,8 +12,6 @@ Run with:
     pytest tests/test_models.py -v
 """
 
-import json
-
 import pytest
 from sqlalchemy import create_engine, event
 from sqlalchemy.exc import IntegrityError
@@ -93,18 +91,18 @@ def make_exam(session: Session, name: str = "GATE CS 2024", year: int = 2024) ->
 
 
 def make_paper(session: Session, exam: Exam, pdf_path: str = "test.pdf") -> Paper:
-    p = Paper(pdf_path=pdf_path, page_count=10, exam_id=exam.id)
+    p = Paper(pdf_path=pdf_path, page_count=10, year=exam.year, exam_id=exam.id)
     session.add(p)
     session.flush()
     return p
 
 
 def make_question(
-    session: Session, paper: Paper, text: str = "What is 2+2?", number: int = 1
+    session: Session, paper: Paper, text: str = "What is 2+2?", number: str = "1"
 ) -> Question:
     q = Question(
         text=text,
-        question_number=number,
+        question_number=str(number),
         question_type=QuestionType.MCQ,
         marks=1.0,
         paper_id=paper.id,
@@ -117,7 +115,7 @@ def make_question(
 def make_solution(session: Session, question: Question) -> Solution:
     s = Solution(
         answer="4",
-        steps_json=json.dumps(["2 + 2 = 4"]),
+        steps_json=["2 + 2 = 4"],
         confidence=ConfidenceLevel.HIGH,
         question_id=question.id,
     )
@@ -168,7 +166,7 @@ class TestModelCreation:
         paper = make_paper(session, exam)
         q = make_question(session, paper, text="Explain BFS.", number=5)
         assert q.id is not None
-        assert q.question_number == 5
+        assert q.question_number == "5"
         assert q.question_type == QuestionType.MCQ
         assert q.paper_id == paper.id
 
@@ -205,13 +203,13 @@ class TestModelCreation:
         steps = ["Step 1: identify", r"Step 2: $\int x dx = x^2/2$"]
         sol = Solution(
             answer="done",
-            steps_json=json.dumps(steps),
+            steps_json=steps,
             confidence=ConfidenceLevel.MEDIUM,
             question_id=q.id,
         )
         session.add(sol)
         session.flush()
-        assert json.loads(sol.steps_json) == steps
+        assert sol.steps_json == steps
 
     def test_create_topic_with_hierarchy(self, session):
         exam = make_exam(session)
@@ -229,7 +227,8 @@ class TestModelCreation:
 
     def test_create_mock_test(self, session):
         user = make_user(session, email="mock@test.com")
-        mt = MockTest(user_id=user.id, status="draft")
+        exam = make_exam(session, name="Mock Exam")
+        mt = MockTest(user_id=user.id, exam_id=exam.id, status="draft")
         session.add(mt)
         session.flush()
         assert mt.id is not None
@@ -237,8 +236,10 @@ class TestModelCreation:
 
     def test_create_study_plan(self, session):
         user = make_user(session, email="plan@test.com")
+        exam = make_exam(session, name="Plan Exam")
         sp = StudyPlan(
             user_id=user.id,
+            exam_id=exam.id,
             title="90-Day Plan",
             target_exam_name="GATE CS",
             total_days=90,
@@ -282,8 +283,7 @@ class TestRelationships:
         q = make_question(session, paper)
         sol = make_solution(session, q)
         session.refresh(q)
-        assert len(q.solutions) == 1
-        assert q.solutions[0].id == sol.id
+        assert q.solution.id == sol.id
         assert sol.question.id == q.id
 
     def test_topic_hierarchy_relationship(self, session):
@@ -311,7 +311,8 @@ class TestRelationships:
 
     def test_user_mock_test_relationship(self, session):
         user = make_user(session, email="user@rel.com")
-        mt = MockTest(user_id=user.id, status="draft")
+        exam = make_exam(session, name="Relationship Mock")
+        mt = MockTest(user_id=user.id, exam_id=exam.id, status="draft")
         session.add(mt)
         session.flush()
         session.refresh(user)
@@ -320,7 +321,8 @@ class TestRelationships:
 
     def test_user_study_plan_relationship(self, session):
         user = make_user(session, email="plan@rel.com")
-        sp = StudyPlan(user_id=user.id, title="My Plan")
+        exam = make_exam(session, name="Relationship Plan")
+        sp = StudyPlan(user_id=user.id, exam_id=exam.id, title="My Plan")
         session.add(sp)
         session.flush()
         session.refresh(user)
@@ -415,14 +417,16 @@ class TestConstraints:
 
     def test_mock_test_status_defaults_to_draft(self, session):
         user = make_user(session, email="draft@test.com")
-        mt = MockTest(user_id=user.id)
+        exam = make_exam(session, name="Draft Exam")
+        mt = MockTest(user_id=user.id, exam_id=exam.id)
         session.add(mt)
         session.flush()
         assert mt.status == "draft"
 
     def test_study_plan_is_active_defaults_true(self, session):
         user = make_user(session, email="active@test.com")
-        sp = StudyPlan(user_id=user.id)
+        exam = make_exam(session, name="Active Plan Exam")
+        sp = StudyPlan(user_id=user.id, exam_id=exam.id)
         session.add(sp)
         session.flush()
         assert sp.is_active is True

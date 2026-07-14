@@ -7,12 +7,14 @@ and uses ``Base.metadata`` from ``src.models`` for autogenerate support.
 import os
 from logging.config import fileConfig
 
+from dotenv import load_dotenv
 from sqlalchemy import engine_from_config, pool
 
 from alembic import context
 
 # Alembic Config object – provides access to values in alembic.ini
 config = context.config
+load_dotenv()
 
 # Set up Python logging from the ini file (if present).
 if config.config_file_name is not None:

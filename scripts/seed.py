@@ -212,6 +212,9 @@ def seed_papers(session: Session, exams: list[Exam]) -> list[Paper]:
             pdf_path="papers/gate_cs_2024.pdf",
             exam_id=exams[0].id,
             defaults=dict(
+                year=2024,
+                session="February",
+                total_marks=100,
                 page_count=32,
                 original_filename="GATE_CS_2024.pdf",
                 file_size_bytes=2_048_000,
@@ -223,6 +226,9 @@ def seed_papers(session: Session, exams: list[Exam]) -> list[Paper]:
             pdf_path="papers/jee_mains_jan_2024.pdf",
             exam_id=exams[1].id,
             defaults=dict(
+                year=2024,
+                session="January",
+                total_marks=300,
                 page_count=24,
                 original_filename="JEE_Mains_Jan_2024.pdf",
                 file_size_bytes=1_536_000,
@@ -234,6 +240,9 @@ def seed_papers(session: Session, exams: list[Exam]) -> list[Paper]:
             pdf_path="papers/jee_advanced_2023_p1.pdf",
             exam_id=exams[2].id,
             defaults=dict(
+                year=2023,
+                session="Paper 1",
+                total_marks=180,
                 page_count=28,
                 original_filename="JEE_Advanced_2023_Paper1.pdf",
                 file_size_bytes=3_072_000,
@@ -277,7 +286,7 @@ def seed_questions(
                 marks=1.0,
                 negative_marks=0.33,
                 question_type=QuestionType.MCQ,
-                options_json=json.dumps(["A", "B", "C", "D"]),
+                options_json=["A", "B", "C", "D"],
                 year=2024,
                 ocr_confidence=0.97,
                 is_sub_question=False,
@@ -292,7 +301,7 @@ def seed_questions(
                 marks=2.0,
                 negative_marks=0.66,
                 question_type=QuestionType.MCQ,
-                options_json=json.dumps(["O(1)", "O(log n)", "O(n)", "O(n²)"]),
+                options_json=["O(1)", "O(log n)", "O(n)", "O(n²)"],
                 year=2024,
                 ocr_confidence=0.95,
                 is_sub_question=False,
@@ -361,13 +370,11 @@ def seed_solutions(session: Session, questions: list[Question]) -> list[Solution
             question_id=questions[0].id,
             defaults=dict(
                 answer="B",
-                steps_json=json.dumps(
-                    [
-                        "A doubly linked list node stores data, a *next* pointer, and a *prev* pointer.",
-                        "This allows O(1) bidirectional traversal.",
-                        "Correct answer: B.",
-                    ]
-                ),
+                steps_json=[
+                    "A doubly linked list node stores data, a *next* pointer, and a *prev* pointer.",
+                    "This allows O(1) bidirectional traversal.",
+                    "Correct answer: B.",
+                ],
                 explanation="Each node in a DLL has two pointers: `next` (forward) and `prev` (backward).",
                 confidence=ConfidenceLevel.HIGH,
                 confidence_score=0.98,
@@ -380,12 +387,10 @@ def seed_solutions(session: Session, questions: list[Question]) -> list[Solution
             question_id=questions[1].id,
             defaults=dict(
                 answer="O(1)",
-                steps_json=json.dumps(
-                    [
-                        "Given a pointer to the node, we can directly update prev.next and next.prev.",
-                        "No traversal is needed, so time complexity is O(1).",
-                    ]
-                ),
+                steps_json=[
+                    "Given a pointer to the node, we can directly update prev.next and next.prev.",
+                    "No traversal is needed, so time complexity is O(1).",
+                ],
                 explanation="With a direct pointer, re-linking neighbours is O(1).",
                 confidence=ConfidenceLevel.HIGH,
                 confidence_score=0.99,
@@ -398,12 +403,10 @@ def seed_solutions(session: Session, questions: list[Question]) -> list[Solution
             question_id=questions[2].id,
             defaults=dict(
                 answer="1/3",
-                steps_json=json.dumps(
-                    [
-                        r"$\int_0^1 x^2 \,dx = \left[\frac{x^3}{3}\right]_0^1$",
-                        r"$= \frac{1}{3} - 0 = \frac{1}{3}$",
-                    ]
-                ),
+                steps_json=[
+                    r"$\int_0^1 x^2 \,dx = \left[\frac{x^3}{3}\right]_0^1$",
+                    r"$= \frac{1}{3} - 0 = \frac{1}{3}$",
+                ],
                 explanation=r"Apply the power rule: $\int x^n dx = \frac{x^{n+1}}{n+1} + C$.",
                 confidence=ConfidenceLevel.HIGH,
                 confidence_score=0.99,
@@ -415,13 +418,11 @@ def seed_solutions(session: Session, questions: list[Question]) -> list[Solution
             question_id=questions[3].id,
             defaults=dict(
                 answer="1/6",
-                steps_json=json.dumps(
-                    [
-                        r"Intersection points: $x^2 = x \Rightarrow x = 0, 1$",
-                        r"Area $= \int_0^1 (x - x^2)\,dx$",
-                        r"$= \left[\frac{x^2}{2} - \frac{x^3}{3}\right]_0^1 = \frac{1}{2} - \frac{1}{3} = \frac{1}{6}$",
-                    ]
-                ),
+                steps_json=[
+                    r"Intersection points: $x^2 = x \Rightarrow x = 0, 1$",
+                    r"Area $= \int_0^1 (x - x^2)\,dx$",
+                    r"$= \left[\frac{x^2}{2} - \frac{x^3}{3}\right]_0^1 = \frac{1}{2} - \frac{1}{3} = \frac{1}{6}$",
+                ],
                 explanation=r"Subtract the lower curve from the upper curve and integrate.",
                 confidence=ConfidenceLevel.MEDIUM,
                 confidence_score=0.87,
@@ -448,13 +449,17 @@ def seed_solutions(session: Session, questions: list[Question]) -> list[Solution
 
 
 def seed_mock_tests(
-    session: Session, users: list[User], questions: list[Question]
+    session: Session, users: list[User], questions: list[Question], exams: list[Exam]
 ) -> list[MockTest]:
     student = users[0]  # Alice
     mock, created = get_or_create(
         session,
         MockTest,
-        {"title": "GATE CS Practice Test #1", "user_id": student.id},
+        {
+            "title": "GATE CS Practice Test #1",
+            "user_id": student.id,
+            "exam_id": exams[0].id,
+        },
         dict(
             generated_paper_json=json.dumps([q.id for q in questions[:2]]),
             status="submitted",
@@ -471,12 +476,18 @@ def seed_mock_tests(
     return [mock]
 
 
-def seed_study_plans(session: Session, users: list[User]) -> list[StudyPlan]:
+def seed_study_plans(
+    session: Session, users: list[User], exams: list[Exam]
+) -> list[StudyPlan]:
     student = users[0]  # Alice
     plan, created = get_or_create(
         session,
         StudyPlan,
-        {"title": "GATE CS 2025 – 90-Day Plan", "user_id": student.id},
+        {
+            "title": "GATE CS 2025 – 90-Day Plan",
+            "user_id": student.id,
+            "exam_id": exams[0].id,
+        },
         dict(
             target_exam_name="GATE CS 2025",
             total_days=90,
@@ -525,10 +536,10 @@ def main() -> None:
         seed_solutions(session, questions)
 
         print("\n=== Seeding Mock Tests ===")
-        seed_mock_tests(session, users, questions)
+        seed_mock_tests(session, users, questions, exams)
 
         print("\n=== Seeding Study Plans ===")
-        seed_study_plans(session, users)
+        seed_study_plans(session, users, exams)
 
         session.commit()
 

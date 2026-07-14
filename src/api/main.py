@@ -25,6 +25,12 @@ def health():
     return {"status": "ok", "service": "examlens-ai"}
 
 
+@app.get("/api/health")
+def api_health():
+    """Milestone-compatible health endpoint under the API prefix."""
+    return health()
+
+
 # Register endpoints
 app.include_router(auth.router, prefix="/api")
 app.include_router(users.router, prefix="/api")

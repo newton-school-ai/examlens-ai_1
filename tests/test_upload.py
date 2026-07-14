@@ -40,6 +40,7 @@ from src.ingestion.pdf_handler import (
     validate_pdf,
 )
 from src.models import Base
+from src.models.user import User, UserRole
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -98,10 +99,13 @@ def client(db):
 
 
 @pytest.fixture
-def auth_token(client):
+def auth_token(client, db):
     """Obtain a valid JWT token via mock Google login."""
     payload = {"code": "mock_code_uploader@example.com_Uploader User_googleid"}
     resp = client.post("/api/auth/google", json=payload)
+    user = db.query(User).filter(User.email == "uploader@example.com").first()
+    user.role = UserRole.CONTRIBUTOR
+    db.commit()
     return resp.json()["access_token"]
 
 
@@ -270,14 +274,14 @@ class TestPageExtractor:
 class TestUploadAPI:
     """Test the POST /api/upload endpoint."""
 
-    def _make_pdf_bytes(self):
+    def _make_pdf_bytes(self, text="Test upload content"):
         """Create an in-memory PDF for upload."""
         import fitz
 
         buf = io.BytesIO()
         doc = fitz.open()
         page = doc.new_page(width=595, height=842)
-        page.insert_text((72, 72), "Test upload content")
+        page.insert_text((72, 72), text)
         doc.save(buf)
         doc.close()
         buf.seek(0)
@@ -317,7 +321,7 @@ class TestUploadAPI:
         response = client.post(
             "/api/upload",
             files={"file": ("test.pdf", pdf_bytes, "application/pdf")},
-            data={"exam_id": exam_id},
+            data={"exam_id": exam_id, "year": 2025, "session": "Morning"},
             headers=headers,
         )
         assert response.status_code == 201
@@ -326,6 +330,18 @@ class TestUploadAPI:
         assert data["original_filename"] == "test.pdf"
         assert data["exam_id"] == exam_id
         assert data["ocr_status"] == "pending"
+        assert data["year"] == 2025
+        assert len(data["pages"]) == data["page_count"]
+        assert data["pages"][0]["page_num"] == 1
+
+        detail = client.get(f"/api/papers/{data['paper_id']}", headers=headers)
+        assert detail.status_code == 200
+        assert detail.json()["question_count"] == 0
+        questions = client.get(
+            f"/api/papers/{data['paper_id']}/questions", headers=headers
+        )
+        assert questions.status_code == 200
+        assert questions.json() == []
 
     def test_upload_image_success(self, client, auth_token):
         exam_id = self._get_exam_id(client, auth_token)
@@ -335,7 +351,7 @@ class TestUploadAPI:
         response = client.post(
             "/api/upload",
             files={"file": ("photo.png", img_bytes, "image/png")},
-            data={"exam_id": exam_id},
+            data={"exam_id": exam_id, "year": 2025},
             headers=headers,
         )
         assert response.status_code == 201
@@ -350,7 +366,7 @@ class TestUploadAPI:
         response = client.post(
             "/api/upload",
             files={"file": ("doc.txt", b"hello world", "text/plain")},
-            data={"exam_id": exam_id},
+            data={"exam_id": exam_id, "year": 2025},
             headers=headers,
         )
         assert response.status_code == 400
@@ -363,7 +379,7 @@ class TestUploadAPI:
         response = client.post(
             "/api/upload",
             files={"file": ("empty.pdf", b"", "application/pdf")},
-            data={"exam_id": exam_id},
+            data={"exam_id": exam_id, "year": 2025},
             headers=headers,
         )
         assert response.status_code == 400
@@ -377,7 +393,7 @@ class TestUploadAPI:
         response = client.post(
             "/api/upload",
             files={"file": ("big.pdf", large, "application/pdf")},
-            data={"exam_id": exam_id},
+            data={"exam_id": exam_id, "year": 2025},
             headers=headers,
         )
         assert response.status_code == 400
@@ -387,7 +403,7 @@ class TestUploadAPI:
         response = client.post(
             "/api/upload",
             files={"file": ("test.pdf", b"not pdf", "application/pdf")},
-            data={"exam_id": 1},
+            data={"exam_id": 1, "year": 2025},
         )
         assert response.status_code == 401
 
@@ -398,7 +414,41 @@ class TestUploadAPI:
         response = client.post(
             "/api/upload",
             files={"file": ("corrupt.pdf", b"not a real pdf", "application/pdf")},
-            data={"exam_id": exam_id},
+            data={"exam_id": exam_id, "year": 2025},
             headers=headers,
         )
         assert response.status_code == 422
+
+    def test_upload_rejects_duplicate_file(self, client, auth_token):
+        exam_id = self._get_exam_id(client, auth_token)
+        headers = {"Authorization": f"Bearer {auth_token}"}
+        payload = self._make_pdf_bytes("Unique duplicate-detection content")
+        form = {"exam_id": exam_id, "year": 2025}
+        first = client.post(
+            "/api/upload",
+            files={"file": ("unique-duplicate-test.pdf", payload, "application/pdf")},
+            data=form,
+            headers=headers,
+        )
+        assert first.status_code == 201
+        second = client.post(
+            "/api/upload",
+            files={"file": ("same-content.pdf", payload, "application/pdf")},
+            data=form,
+            headers=headers,
+        )
+        assert second.status_code == 409
+
+    def test_upload_requires_contributor_role(self, client):
+        login = client.post(
+            "/api/auth/google",
+            json={"code": "mock_code_student-upload@example.com_Student User"},
+        )
+        token = login.json()["access_token"]
+        response = client.post(
+            "/api/upload",
+            files={"file": ("paper.pdf", b"not important", "application/pdf")},
+            data={"exam_id": 1, "year": 2025},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 403

@@ -4,7 +4,7 @@ import enum
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Boolean, DateTime, Enum, Float, ForeignKey, Text, func
+from sqlalchemy import JSON, Boolean, DateTime, Enum, Float, ForeignKey, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.models.base import Base
@@ -34,10 +34,9 @@ class Solution(Base):
 
     # Content
     answer: Mapped[str] = mapped_column(Text, nullable=False)
-    steps_json: Mapped[Optional[str]] = mapped_column(
-        Text, nullable=True
-    )  # JSON list of step strings (may include LaTeX)
+    steps_json: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
     explanation: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    latex: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Quality signals
     confidence: Mapped[ConfidenceLevel] = mapped_column(
@@ -58,7 +57,10 @@ class Solution(Base):
 
     # Foreign key
     question_id: Mapped[int] = mapped_column(
-        ForeignKey("questions.id", ondelete="CASCADE"), nullable=False, index=True
+        ForeignKey("questions.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        index=True,
     )
 
     # Timestamps
@@ -73,7 +75,7 @@ class Solution(Base):
     )
 
     # Relationships
-    question: Mapped["Question"] = relationship("Question", back_populates="solutions")
+    question: Mapped["Question"] = relationship("Question", back_populates="solution")
 
     def __repr__(self) -> str:
         return (

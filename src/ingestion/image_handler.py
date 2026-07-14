@@ -4,7 +4,7 @@ from pathlib import Path
 
 from PIL import Image
 
-SUPPORTED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".tiff", ".tif", ".bmp", ".webp"}
+SUPPORTED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png"}
 MIN_WIDTH = 640
 MIN_HEIGHT = 480
 MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024  # 50 MB

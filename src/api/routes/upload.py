@@ -1,30 +1,30 @@
 """Paper upload endpoints."""
 
+import hashlib
 import shutil
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
-from src.api.middleware.auth import get_current_user
+from src.api.middleware.auth import require_role
 from src.config.settings import settings
 from src.database import get_db
-from src.ingestion.image_handler import (
-    SUPPORTED_IMAGE_EXTENSIONS,
-    ImageValidationError,
-)
+from src.ingestion.image_handler import SUPPORTED_IMAGE_EXTENSIONS, ImageValidationError
 from src.ingestion.page_extractor import (
     PageExtractionError,
     extract_pages_from_image,
     extract_pages_from_pdf,
 )
 from src.ingestion.pdf_handler import PDFValidationError
+from src.models.exam import Exam
 from src.models.paper import Paper
-from src.models.user import User
+from src.models.user import User, UserRole
 
 router = APIRouter(prefix="/upload", tags=["upload"])
 
 ALLOWED_EXTENSIONS = {".pdf"} | SUPPORTED_IMAGE_EXTENSIONS
+ALLOWED_CONTENT_TYPES = {"application/pdf", "image/jpeg", "image/png"}
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
 
 
@@ -32,7 +32,10 @@ MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
 async def upload_paper(
     file: UploadFile,
     exam_id: int = Form(...),
-    current_user: User = Depends(get_current_user),
+    year: int = Form(...),
+    session: str | None = Form(None),
+    total_marks: float | None = Form(None),
+    current_user: User = Depends(require_role(UserRole.CONTRIBUTOR)),
     db: Session = Depends(get_db),
 ):
     """Upload a PDF or image file and extract individual pages.
@@ -57,6 +60,18 @@ async def upload_paper(
             detail=f"Unsupported file type: {ext}. Allowed: {', '.join(sorted(ALLOWED_EXTENSIONS))}",
         )
 
+    if file.content_type not in ALLOWED_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unsupported content type. Allowed: PDF, JPEG, PNG.",
+        )
+
+    if db.get(Exam, exam_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Exam not found.",
+        )
+
     # Read file contents to validate size and check readability
     contents = await file.read()
     if len(contents) == 0:
@@ -70,12 +85,24 @@ async def upload_paper(
             detail=f"File too large. Maximum size is {MAX_FILE_SIZE // (1024 * 1024)} MB.",
         )
 
+    file_hash = hashlib.sha256(contents).hexdigest()
+    duplicate = db.query(Paper).filter(Paper.file_hash == file_hash).first()
+    if duplicate:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"This paper was already uploaded as paper {duplicate.id}.",
+        )
+
     # Create a Paper record first so we have an ID for the storage path
     paper = Paper(
         pdf_path="",  # Will be updated after extraction
         page_count=0,
         original_filename=file.filename,
         file_size_bytes=len(contents),
+        file_hash=file_hash,
+        year=year,
+        session=session,
+        total_marks=total_marks,
         exam_id=exam_id,
     )
     db.add(paper)
@@ -87,7 +114,8 @@ async def upload_paper(
     papers_dir.mkdir(parents=True, exist_ok=True)
 
     # Write uploaded file to disk
-    temp_path = papers_dir / file.filename
+    original_name = "original.pdf" if ext == ".pdf" else f"original{ext}"
+    temp_path = papers_dir / original_name
     with open(temp_path, "wb") as f:
         f.write(contents)
 
@@ -100,7 +128,7 @@ async def upload_paper(
             page_count = len(pages)
 
         # Update paper record
-        paper.pdf_path = str(papers_dir)
+        paper.pdf_path = str(temp_path)
         paper.page_count = page_count
         paper.ocr_status = "pending"
         db.commit()
@@ -113,15 +141,23 @@ async def upload_paper(
         db.delete(paper)
         db.commit()
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"Failed to process uploaded file: {exc}",
         )
 
     return {
+        "paper_id": paper.id,
         "id": paper.id,
         "original_filename": paper.original_filename,
         "page_count": paper.page_count,
         "exam_id": paper.exam_id,
         "ocr_status": paper.ocr_status,
         "file_size_bytes": paper.file_size_bytes,
+        "year": paper.year,
+        "session": paper.session,
+        "total_marks": paper.total_marks,
+        "pages": [
+            {"page_num": index, "image_path": str(path)}
+            for index, path in enumerate(pages, start=1)
+        ],
     }
