@@ -141,7 +141,7 @@ async def upload_paper(
         db.delete(paper)
         db.commit()
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"Failed to process uploaded file: {exc}",
         )
 
