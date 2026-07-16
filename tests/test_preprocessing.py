@@ -126,5 +126,6 @@ def test_pipeline_completes_under_one_second_on_sample_page():
         cv2.putText(page, "ExamLens question text", (30, y), 0, 0.7, (0, 0, 0), 2)
     started = time.perf_counter()
     result = preprocess_image(page)
-    assert time.perf_counter() - started < 5.0
+    elapsed = time.perf_counter() - started
+    assert elapsed < 1.0
     assert result.shape == page.shape[:2]

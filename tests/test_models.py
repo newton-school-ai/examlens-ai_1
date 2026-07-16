@@ -63,7 +63,8 @@ def session(engine):
     sess = Session(bind=connection)
     yield sess
     sess.close()
-    transaction.rollback()
+    if transaction.is_active:
+        transaction.rollback()
     connection.close()
 
 
