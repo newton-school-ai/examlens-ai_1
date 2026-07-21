@@ -44,6 +44,7 @@ h1 {
 .lede { max-width: 590px; color: #55615a; line-height: 1.7; }
 .docs { display: inline-block; margin-top: 32px; color: #244b31; font-weight: 700; }
 .session { display: flex; align-items: center; gap: 24px; margin-top: 28px; }
+.avatar { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; }
 .session div { display: grid; gap: 4px; }
 .session span { color: #68746c; font-size: 14px; text-transform: capitalize; }
 .session button { padding: 10px 16px; border: 1px solid #244b31; background: transparent; cursor: pointer; }

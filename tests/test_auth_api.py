@@ -212,3 +212,22 @@ def test_exam_crud(client, db):
     filtered_resp = client.get("/api/papers?exam_type=gate&year=2025", headers=headers)
     assert filtered_resp.status_code == 200
     assert len(filtered_resp.json()) == 0
+
+
+def test_exam_create_accepts_issue_type_field(client, db):
+    """Issue #4 examples use ``type`` for exam category."""
+    payload = {"code": "mock_code_examtype@example.com_Exam Type User"}
+    token = client.post("/api/auth/google", json=payload).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    contributor = db.query(User).filter(User.email == "examtype@example.com").first()
+    contributor.role = UserRole.CONTRIBUTOR
+    db.commit()
+
+    response = client.post(
+        "/api/exams",
+        json={"name": "GATE CS Alias", "type": "gate", "year": 2026},
+        headers=headers,
+    )
+
+    assert response.status_code == 201
+    assert response.json()["exam_type"] == "gate"

@@ -2,7 +2,7 @@ import GoogleLoginButton from "./components/GoogleLoginButton";
 import { useAuth } from "./contexts/AuthContext";
 
 export default function App() {
-  const { isAuthenticated, logout, user } = useAuth();
+  const { isAuthLoading, isAuthenticated, logout, user } = useAuth();
 
   return (
     <main className="shell">
@@ -13,8 +13,23 @@ export default function App() {
           Sign in to access the authenticated upload and exam-management API.
           Interactive API documentation is available at port 8000.
         </p>
-        {isAuthenticated ? (
+        {isAuthLoading ? (
           <div className="session">
+            <div>
+              <strong>Restoring session</strong>
+              <span>Please wait</span>
+            </div>
+          </div>
+        ) : isAuthenticated ? (
+          <div className="session">
+            {user?.avatar_url && (
+              <img
+                className="avatar"
+                src={user.avatar_url}
+                alt=""
+                referrerPolicy="no-referrer"
+              />
+            )}
             <div>
               <strong>{user?.full_name || user?.email}</strong>
               <span>{user?.role}</span>

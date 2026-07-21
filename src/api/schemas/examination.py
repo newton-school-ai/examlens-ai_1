@@ -3,16 +3,18 @@
 from datetime import datetime
 from typing import Any, Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from src.models.exam import ExamType
 
 
 class ExamBase(BaseModel):
     name: str
-    exam_type: ExamType
+    exam_type: ExamType = Field(validation_alias="type")
     year: int
     description: Optional[str] = None
+
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class ExamCreate(ExamBase):
