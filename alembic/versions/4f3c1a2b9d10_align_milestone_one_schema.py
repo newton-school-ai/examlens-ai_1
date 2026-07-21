@@ -121,7 +121,9 @@ def upgrade() -> None:
     )
 
     op.add_column("mock_tests", sa.Column("exam_id", sa.Integer(), nullable=True))
-    op.execute("UPDATE mock_tests SET exam_id = (SELECT id FROM exams ORDER BY id LIMIT 1)")
+    op.execute(
+        "UPDATE mock_tests SET exam_id = (SELECT id FROM exams ORDER BY id LIMIT 1)"
+    )
     op.alter_column("mock_tests", "exam_id", nullable=False)
     op.create_foreign_key(
         "fk_mock_tests_exam_id",

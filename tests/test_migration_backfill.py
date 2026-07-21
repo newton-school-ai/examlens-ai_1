@@ -98,14 +98,16 @@ def test_ensure_legacy_exam_leaves_clean_database_empty(session):
 
 def test_deduplicate_solutions_keeps_latest_solution_per_question(session):
     """The migration should remove older duplicate solutions before the unique constraint."""
-    session.execute(text(
-        """
+    session.execute(
+        text(
+            """
         INSERT INTO solutions (id, question_id, answer) VALUES
         (1, 10, 'first'),
         (2, 10, 'latest'),
         (3, 11, 'only')
         """
-    ))
+        )
+    )
     session.commit()
 
     MIGRATION_MODULE._deduplicate_solutions(session)
