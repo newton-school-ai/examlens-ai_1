@@ -4,7 +4,17 @@ import enum
 from datetime import datetime
 from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import DateTime, Enum, Float, ForeignKey, Integer, Text, func
+from sqlalchemy import (
+    JSON,
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.models.base import Base
@@ -39,7 +49,7 @@ class Question(Base):
 
     # Content
     text: Mapped[str] = mapped_column(Text, nullable=False)
-    question_number: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    question_number: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     marks: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     negative_marks: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     question_type: Mapped[QuestionType] = mapped_column(
@@ -53,7 +63,9 @@ class Question(Base):
     )
 
     # For MCQ - options stored as JSON text (parsed by application)
-    options_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    options_json: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    sub_parts: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    image_path: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
 
     # Sub-part info
     is_sub_question: Mapped[bool] = mapped_column(default=False, nullable=False)
@@ -85,8 +97,11 @@ class Question(Base):
 
     # Relationships
     paper: Mapped["Paper"] = relationship("Paper", back_populates="questions")
-    solutions: Mapped[List["Solution"]] = relationship(
-        "Solution", back_populates="question", cascade="all, delete-orphan"
+    solution: Mapped[Optional["Solution"]] = relationship(
+        "Solution",
+        back_populates="question",
+        cascade="all, delete-orphan",
+        uselist=False,
     )
     sub_questions: Mapped[List["Question"]] = relationship(
         "Question", back_populates="parent_question"

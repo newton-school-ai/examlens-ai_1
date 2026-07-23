@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.models.base import Base
@@ -29,6 +29,14 @@ class Paper(Base):
     page_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     original_filename: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     file_size_bytes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    file_hash: Mapped[Optional[str]] = mapped_column(
+        String(64), unique=True, index=True, nullable=True
+    )
+
+    # Paper metadata supplied during upload
+    year: Mapped[int] = mapped_column(Integer, nullable=False)
+    session: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    total_marks: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
     # OCR / ingestion status
     ocr_status: Mapped[str] = mapped_column(

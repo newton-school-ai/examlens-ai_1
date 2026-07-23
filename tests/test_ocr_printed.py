@@ -2,16 +2,22 @@
 # isort: skip_file
 from unittest.mock import MagicMock, patch
 
+import numpy as np
 import pytest
 
-from src.cv.ocr_printed import OCRResult, extract_text_printed, post_process_text
+from src.cv.ocr_printed import (
+    TESSERACT_CONFIG,
+    OCRResult,
+    extract_text_printed,
+    post_process_text,
+)
 # fmt: on
 
 
 @pytest.fixture
 def mock_cv2_imread():
     with patch("src.cv.ocr_printed.cv2.imread") as mock_imread:
-        mock_imread.return_value = MagicMock()  # Mock image array
+        mock_imread.return_value = np.ones((80, 240, 3), dtype=np.uint8) * 255
         yield mock_imread
 
 
@@ -64,7 +70,7 @@ def test_noisy_scan_triggers_easyocr_fallback(
     assert result.engine == "easyocr"
     assert result.confidence == 0.875  # (0.85+0.90)/2
     assert result.text == "Hello World"
-    mock_reader.readtext.assert_called_once_with("dummy_path.png")
+    mock_reader.readtext.assert_called_once()
 
 
 @patch("src.cv.ocr_printed.pytesseract.image_to_data")
@@ -132,3 +138,41 @@ def test_structured_output_format(mock_tesseract, mock_cv2_imread):
     assert bbox["h"] == 15
     assert bbox["text"] == "Data"
     assert bbox["conf"] == 99.0
+
+
+@patch("src.cv.ocr_printed.pytesseract.image_to_data")
+@patch("src.cv.ocr_printed.get_easyocr_reader")
+def test_keeps_tesseract_when_fallback_is_worse(
+    mock_get_reader, mock_tesseract, mock_cv2_imread
+):
+    mock_tesseract.return_value = {
+        "text": ["Readable"],
+        "conf": ["65"],
+        "left": [1],
+        "top": [2],
+        "width": [30],
+        "height": [10],
+    }
+    reader = MagicMock()
+    reader.readtext.return_value = [([[0, 0], [20, 0], [20, 10], [0, 10]], "Bad", 0.40)]
+    mock_get_reader.return_value = reader
+    result = extract_text_printed("dummy_path.png")
+    assert result.engine == "tesseract"
+    assert result.text == "Readable"
+
+
+@patch("src.cv.ocr_printed.pytesseract.image_to_data")
+def test_tesseract_uses_required_lstm_and_page_segmentation(
+    mock_tesseract, mock_cv2_imread
+):
+    mock_tesseract.return_value = {
+        "text": ["Configured"],
+        "conf": ["98"],
+        "left": [1],
+        "top": [2],
+        "width": [30],
+        "height": [10],
+    }
+    extract_text_printed("dummy_path.png")
+    assert mock_tesseract.call_args.kwargs["config"] == TESSERACT_CONFIG
+    assert mock_tesseract.call_args.kwargs["lang"] == "eng+hin"

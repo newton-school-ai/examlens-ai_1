@@ -31,15 +31,19 @@ def deskew(image: np.ndarray) -> np.ndarray:
                 angles.append(angle_deg)
         if angles:
             angle = np.median(angles)
-    else:
-        # Fallback: compute angle from bounding box of all text pixels
+
+    if abs(angle) < 0.1:
+        # Fallback: compute one bounding box from all foreground pixels.
         _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
-        contours = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)[
-            -2
-        ]
-        if contours:
-            rect_angle = cv2.minAreaRect(contours[0])[-1]
-            angle = -(90 + rect_angle) if rect_angle < -45 else -rect_angle
+        points = np.column_stack(np.where(thresh > 0))
+        if len(points) > 10:
+            rect_angle = cv2.minAreaRect(points[:, ::-1].astype(np.float32))[-1]
+            angle = rect_angle - 90 if rect_angle > 45 else rect_angle
+
+    # Exam photos are expected to have small skew. Avoid rotating pages based on
+    # vertical borders or diagrams that are not text baselines.
+    if abs(angle) > 15.5:
+        return image
 
     if abs(angle) < 0.1:
         return image
@@ -72,6 +76,8 @@ def binarize(image: np.ndarray, block_size: int = 11, C: int = 2) -> np.ndarray:
         block_size: Size of the pixel neighbourhood used to calculate threshold.
         C: Constant subtracted from the mean. Higher values produce lighter output.
     """
+    if block_size <= 1 or block_size % 2 == 0:
+        raise ValueError("block_size must be an odd integer greater than 1")
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
     return cv2.adaptiveThreshold(
         gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, block_size, C

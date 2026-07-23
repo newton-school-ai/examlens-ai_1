@@ -1,146 +1,142 @@
-"""Printed text OCR using Tesseract and EasyOCR."""
+"""Confidence-aware printed OCR using Tesseract with an EasyOCR fallback."""
 
-# fmt: off
-# isort: skip_file
 import re
-from typing import Any, Dict, List
+from typing import Any
 
 import cv2
 import easyocr
+import numpy as np
 import pytesseract
 from pydantic import BaseModel
-from pytesseract import Output
-# fmt: on
+from pytesseract import Output, TesseractError, TesseractNotFoundError
 
-# Initialize EasyOCR reader lazily to avoid loading models if not needed
+from src.config.settings import settings
+from src.cv.preprocessing import preprocess_image
+
+TESSERACT_CONFIG = "--oem 1 --psm 3"
 _easyocr_reader = None
-
-
-def get_easyocr_reader():
-    global _easyocr_reader
-    if _easyocr_reader is None:
-        _easyocr_reader = easyocr.Reader(["en", "hi"])
-    return _easyocr_reader
 
 
 class OCRResult(BaseModel):
     text: str
     confidence: float
     engine: str
-    bounding_boxes: List[Dict[str, Any]]
+    bounding_boxes: list[dict[str, Any]]
+
+
+def get_easyocr_reader():
+    """Load the heavier fallback model only when it is actually needed."""
+    global _easyocr_reader
+    if _easyocr_reader is None:
+        _easyocr_reader = easyocr.Reader(["en", "hi"], gpu=False)
+    return _easyocr_reader
 
 
 def post_process_text(text: str) -> str:
-    """
-    Corrects common OCR errors based on simple heuristics.
-    Issue 6 specific replacements:
-    'l' -> '1' (in digit context)
-    'O' -> '0' (in digit context)
-    'rn' -> 'm'
-    """
-    # Replace 'rn' with 'm' (naive replace as per issue description)
-    text = text.replace("rn", "m")
-
-    # Context-aware replacement for 'O' -> '0'
-    text = re.sub(r"(?<=\d)O", "0", text)
-    text = re.sub(r"O(?=\d)", "0", text)
-
-    # Context-aware replacement for 'l' -> '1'
-    text = re.sub(r"(?<=\d)l", "1", text)
-    text = re.sub(r"l(?=\d)", "1", text)
-
+    """Correct the milestone's common OCR confusions using local context."""
+    text = re.sub(r"(?<=[A-Za-z])rn(?=[A-Za-z]|$)|\brn\b", "m", text)
+    text = re.sub(r"(?<=\d)O(?=\d)|(?<=\d)O\b|\bO(?=\d)", "0", text)
+    text = re.sub(r"(?<=\d)l(?=\d)|(?<=\d)l\b|\bl(?=\d)", "1", text)
     return text
 
 
-def extract_text_printed(image_path: str) -> OCRResult:
-    """
-    Extract printed text from an image using Tesseract (primary) and EasyOCR (fallback).
-    """
-    img = cv2.imread(image_path)
-    if img is None:
+def tesseract_ocr(image: np.ndarray, lang: str = "eng+hin") -> OCRResult:
+    """Run Tesseract LSTM OCR and return text, confidence, and word boxes."""
+    data = pytesseract.image_to_data(
+        image,
+        lang=lang,
+        config=TESSERACT_CONFIG,
+        output_type=Output.DICT,
+    )
+    words: list[str] = []
+    confidences: list[float] = []
+    boxes: list[dict[str, Any]] = []
+    for index, raw_text in enumerate(data["text"]):
+        word = raw_text.strip()
+        confidence = float(data["conf"][index])
+        if not word or confidence <= 0:
+            continue
+        words.append(word)
+        confidences.append(confidence)
+        boxes.append(
+            {
+                "x": int(data["left"][index]),
+                "y": int(data["top"][index]),
+                "w": int(data["width"][index]),
+                "h": int(data["height"][index]),
+                "text": word,
+                "conf": confidence,
+            }
+        )
+    average = sum(confidences) / len(confidences) / 100 if confidences else 0.0
+    return OCRResult(
+        text=post_process_text(" ".join(words)),
+        confidence=average,
+        engine="tesseract",
+        bounding_boxes=boxes,
+    )
+
+
+def easyocr_fallback(image: np.ndarray) -> OCRResult:
+    """Run CPU EasyOCR and normalize its polygon boxes to x/y/w/h boxes."""
+    results = get_easyocr_reader().readtext(image)
+    words: list[str] = []
+    confidences: list[float] = []
+    boxes: list[dict[str, Any]] = []
+    for polygon, raw_text, probability in results:
+        word = raw_text.strip()
+        if not word:
+            continue
+        x_values = [point[0] for point in polygon]
+        y_values = [point[1] for point in polygon]
+        x, y = min(x_values), min(y_values)
+        width, height = max(x_values) - x, max(y_values) - y
+        words.append(word)
+        confidences.append(float(probability))
+        boxes.append(
+            {
+                "x": int(x),
+                "y": int(y),
+                "w": int(width),
+                "h": int(height),
+                "text": word,
+                "conf": float(probability),
+            }
+        )
+    average = sum(confidences) / len(confidences) if confidences else 0.0
+    return OCRResult(
+        text=post_process_text(" ".join(words)),
+        confidence=average,
+        engine="easyocr",
+        bounding_boxes=boxes,
+    )
+
+
+def extract_text_printed(image_path: str, preprocess: bool = True) -> OCRResult:
+    """Use fast Tesseract first and return EasyOCR only when it is better."""
+    image = cv2.imread(image_path)
+    if image is None:
         raise ValueError(f"Could not read image from {image_path}")
+    prepared = preprocess_image(image) if preprocess else image
 
-    # 1. Try Tesseract first
     try:
-        data = pytesseract.image_to_data(img, lang="eng+hin", output_type=Output.DICT)
-
-        text_parts = []
-        confidences = []
-        bboxes = []
-
-        for i in range(len(data["text"])):
-            text = data["text"][i].strip()
-            conf = float(data["conf"][i])
-            if text and conf > 0:  # Valid word with confidence
-                text_parts.append(text)
-                confidences.append(conf)
-                bboxes.append(
-                    {
-                        "x": data["left"][i],
-                        "y": data["top"][i],
-                        "w": data["width"][i],
-                        "h": data["height"][i],
-                        "text": text,
-                        "conf": conf,
-                    }
-                )
-
-        overall_conf = (
-            (sum(confidences) / len(confidences) / 100.0) if confidences else 0.0
+        primary = tesseract_ocr(prepared)
+    except TesseractError:
+        # Keep English OCR usable on machines that have not installed the
+        # optional Hindi language pack. Docker installs both languages.
+        try:
+            primary = tesseract_ocr(prepared, lang="eng")
+        except (TesseractError, TesseractNotFoundError):
+            primary = OCRResult(
+                text="", confidence=0.0, engine="tesseract", bounding_boxes=[]
+            )
+    except TesseractNotFoundError:
+        primary = OCRResult(
+            text="", confidence=0.0, engine="tesseract", bounding_boxes=[]
         )
 
-        if overall_conf >= 0.7 and text_parts:
-            # Tesseract succeeded with high confidence
-            full_text = " ".join(text_parts)
-            processed_text = post_process_text(full_text)
-            return OCRResult(
-                text=processed_text,
-                confidence=overall_conf,
-                engine="tesseract",
-                bounding_boxes=bboxes,
-            )
+    if primary.text and primary.confidence >= settings.ocr_confidence_threshold:
+        return primary
 
-    except Exception:
-        # Fallback if tesseract fails completely
-        pass
-
-    # 2. EasyOCR Fallback (if tesseract conf < 0.7 or failed)
-    reader = get_easyocr_reader()
-    results = reader.readtext(image_path)
-
-    text_parts = []
-    confidences = []
-    bboxes = []
-
-    for bbox, text, prob in results:
-        text = text.strip()
-        if text:
-            text_parts.append(text)
-            confidences.append(prob)
-
-            x_coords = [p[0] for p in bbox]
-            y_coords = [p[1] for p in bbox]
-            x, y = min(x_coords), min(y_coords)
-            w, h = max(x_coords) - x, max(y_coords) - y
-
-            bboxes.append(
-                {
-                    "x": int(x),
-                    "y": int(y),
-                    "w": int(w),
-                    "h": int(h),
-                    "text": text,
-                    "conf": float(prob),
-                }
-            )
-
-    overall_conf = (sum(confidences) / len(confidences)) if confidences else 0.0
-    full_text = " ".join(text_parts)
-    processed_text = post_process_text(full_text)
-
-    return OCRResult(
-        text=processed_text,
-        confidence=overall_conf,
-        engine="easyocr",
-        bounding_boxes=bboxes,
-    )
+    fallback = easyocr_fallback(prepared)
+    return fallback if fallback.confidence > primary.confidence else primary

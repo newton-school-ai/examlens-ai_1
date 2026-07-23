@@ -46,6 +46,9 @@ class Topic(Base):
 
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    frequency_count: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False
+    )
 
     # Self-referencing hierarchy (Unit > Topic > Subtopic)
     parent_id: Mapped[Optional[int]] = mapped_column(

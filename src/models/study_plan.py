@@ -9,6 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.models.base import Base
 
 if TYPE_CHECKING:
+    from src.models.exam import Exam
     from src.models.user import User
 
 
@@ -50,6 +51,9 @@ class StudyPlan(Base):
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    exam_id: Mapped[int] = mapped_column(
+        ForeignKey("exams.id", ondelete="CASCADE"), nullable=False, index=True
+    )
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
@@ -64,6 +68,7 @@ class StudyPlan(Base):
 
     # Relationships
     user: Mapped["User"] = relationship("User", back_populates="study_plans")
+    exam: Mapped["Exam"] = relationship("Exam", back_populates="study_plans")
 
     def __repr__(self) -> str:
         return (

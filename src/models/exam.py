@@ -10,7 +10,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.models.base import Base
 
 if TYPE_CHECKING:
+    from src.models.mock_test import MockTest
     from src.models.paper import Paper
+    from src.models.study_plan import StudyPlan
     from src.models.topic import Topic
 
 
@@ -64,6 +66,12 @@ class Exam(Base):
     )
     topics: Mapped[List["Topic"]] = relationship(
         "Topic", back_populates="exam", cascade="all, delete-orphan"
+    )
+    mock_tests: Mapped[List["MockTest"]] = relationship(
+        "MockTest", back_populates="exam", cascade="all, delete-orphan"
+    )
+    study_plans: Mapped[List["StudyPlan"]] = relationship(
+        "StudyPlan", back_populates="exam", cascade="all, delete-orphan"
     )
 
     def __repr__(self) -> str:

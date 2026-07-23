@@ -40,7 +40,8 @@ def db():
     yield session
 
     session.close()
-    transaction.rollback()
+    if transaction.is_active:
+        transaction.rollback()
     connection.close()
     Base.metadata.drop_all(bind=engine)
 
@@ -93,6 +94,27 @@ def test_jwt_validation_and_me(client):
     assert response.status_code == 200
     user_data = response.json()
     assert user_data["email"] == "validjwt@example.com"
+
+
+def test_refresh_token_returns_a_new_valid_pair(client):
+    login = client.post(
+        "/api/auth/google",
+        json={"code": "mock_code_refresh@example.com_Refresh User"},
+    )
+    response = client.post(
+        "/api/auth/refresh",
+        json={"refresh_token": login.json()["refresh_token"]},
+    )
+    assert response.status_code == 200
+    assert response.json()["access_token"]
+    assert response.json()["refresh_token"]
+
+    profile = client.get(
+        "/api/users/me",
+        headers={"Authorization": f"Bearer {response.json()['access_token']}"},
+    )
+    assert profile.status_code == 200
+    assert profile.json()["email"] == "refresh@example.com"
 
 
 def test_protected_route_401(client):
@@ -148,6 +170,9 @@ def test_exam_crud(client, db):
     payload = {"code": "mock_code_examcrud@example.com_Exam Crud User"}
     token = client.post("/api/auth/google", json=payload).json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
+    contributor = db.query(User).filter(User.email == "examcrud@example.com").first()
+    contributor.role = UserRole.CONTRIBUTOR
+    db.commit()
 
     # Create exam
     exam_payload = {
@@ -167,15 +192,42 @@ def test_exam_crud(client, db):
     assert dup_resp.status_code == 400
 
     # Get exam papers list (initially empty)
-    papers_resp = client.get(f"/api/exams/{exam_data['id']}/papers")
+    exams_resp = client.get("/api/exams", headers=headers)
+    assert exams_resp.status_code == 200
+    assert any(item["id"] == exam_data["id"] for item in exams_resp.json())
+
+    detail_resp = client.get(f"/api/exams/{exam_data['id']}", headers=headers)
+    assert detail_resp.status_code == 200
+    assert detail_resp.json()["paper_count"] == 0
+
+    papers_resp = client.get(f"/api/exams/{exam_data['id']}/papers", headers=headers)
     assert papers_resp.status_code == 200
     assert len(papers_resp.json()) == 0
 
     # Query papers directly
-    all_papers_resp = client.get("/api/papers")
+    all_papers_resp = client.get("/api/papers", headers=headers)
     assert all_papers_resp.status_code == 200
 
     # Query with filter
-    filtered_resp = client.get("/api/papers?exam_type=gate&year=2025")
+    filtered_resp = client.get("/api/papers?exam_type=gate&year=2025", headers=headers)
     assert filtered_resp.status_code == 200
     assert len(filtered_resp.json()) == 0
+
+
+def test_exam_create_accepts_issue_type_field(client, db):
+    """Issue #4 examples use ``type`` for exam category."""
+    payload = {"code": "mock_code_examtype@example.com_Exam Type User"}
+    token = client.post("/api/auth/google", json=payload).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    contributor = db.query(User).filter(User.email == "examtype@example.com").first()
+    contributor.role = UserRole.CONTRIBUTOR
+    db.commit()
+
+    response = client.post(
+        "/api/exams",
+        json={"name": "GATE CS Alias", "type": "gate", "year": 2026},
+        headers=headers,
+    )
+
+    assert response.status_code == 201
+    assert response.json()["exam_type"] == "gate"
