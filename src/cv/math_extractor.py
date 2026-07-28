@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import os
 import re
-from typing import Any
+from typing import Any, Sequence
 
 import cv2
 import numpy as np
@@ -45,6 +45,14 @@ class EquationResult(EquationRegion):
     latex: str
     confidence: float = Field(ge=0.0, le=1.0)
     needs_correction: bool = False
+
+
+class MathAwareTextResult(BaseModel):
+    """OCR text with recognized equations embedded in page reading order."""
+
+    text: str
+    equations: list[EquationResult]
+    text_confidence: float = Field(ge=0.0, le=1.0)
 
 
 def get_latex_model() -> Any:
@@ -424,14 +432,145 @@ def extract_equations(
     return results
 
 
+def _vertical_overlap(first: Any, second: Any) -> float:
+    """Return vertical overlap relative to the shorter item."""
+    top = max(first.y, second.y)
+    bottom = min(first.y + first.height, second.y + second.height)
+    shorter = min(first.height, second.height)
+    return max(0, bottom - top) / shorter if shorter else 0.0
+
+
+def _nearest_word_boundary(text: str, target: int) -> int:
+    """Choose the closest whitespace boundary to a character offset."""
+    boundaries = [0, len(text)]
+    boundaries.extend(match.end() for match in re.finditer(r"\s+", text))
+    return min(boundaries, key=lambda boundary: abs(boundary - target))
+
+
+def merge_equations_into_text(
+    text_lines: Sequence[Any], equations: Sequence[EquationResult]
+) -> str:
+    """Merge positioned OCR lines and equations into one Markdown/LaTeX string.
+
+    Text lines must expose ``text``, ``x``, ``y``, ``width``, and ``height``.
+    Inline equations are inserted at the nearest word boundary inferred from
+    their horizontal page coordinate. Display equations remain separate lines.
+    """
+    ordered_lines = sorted(text_lines, key=lambda item: (item.y, item.x))
+    inline_by_line: dict[int, list[EquationResult]] = {}
+    display_equations: list[EquationResult] = []
+
+    for equation in equations:
+        candidates = [
+            (index, _vertical_overlap(line, equation))
+            for index, line in enumerate(ordered_lines)
+        ]
+        best_index, best_overlap = max(
+            candidates, key=lambda item: item[1], default=(-1, 0)
+        )
+        if equation.inline and best_overlap >= 0.35:
+            inline_by_line.setdefault(best_index, []).append(equation)
+        else:
+            display_equations.append(equation)
+
+    blocks: list[tuple[int, int, str]] = []
+    for index, line in enumerate(ordered_lines):
+        text = line.text
+        insertions: list[tuple[int, str]] = []
+        for equation in inline_by_line.get(index, []):
+            relative_center = (equation.x + equation.width / 2 - line.x) / max(
+                1, line.width
+            )
+            target = round(max(0.0, min(1.0, relative_center)) * len(text))
+            offset = _nearest_word_boundary(text, target)
+            insertions.append((offset, f"${equation.latex}$"))
+        for offset, token in sorted(insertions, reverse=True):
+            separator_before = "" if offset == 0 or text[offset - 1].isspace() else " "
+            separator_after = (
+                "" if offset == len(text) or text[offset].isspace() else " "
+            )
+            text = (
+                text[:offset]
+                + separator_before
+                + token
+                + separator_after
+                + text[offset:]
+            )
+        blocks.append((line.y, line.x, text.strip()))
+
+    blocks.extend(
+        (equation.y, equation.x, f"$${equation.latex}$$")
+        for equation in display_equations
+    )
+    return "\n".join(
+        text
+        for _, _, text in sorted(blocks, key=lambda item: (item[0], item[1]))
+        if text
+    )
+
+
+def extract_text_with_equations(
+    image_path: str,
+    detection_threshold: float = 0.45,
+    equation_confidence_threshold: float = 0.65,
+    text_confidence_threshold: float | None = None,
+    detect_mixed: bool = True,
+) -> MathAwareTextResult:
+    """Extract page text and put LaTeX back at its spatial reading position."""
+    from src.cv.ocr_handwritten import extract_text_handwritten_image
+
+    image = cv2.imread(os.fspath(image_path))
+    if image is None:
+        raise ValueError(f"Could not read image from {image_path}")
+    equations = extract_equations(
+        image_path,
+        detection_threshold=detection_threshold,
+        confidence_threshold=equation_confidence_threshold,
+    )
+
+    # OCR the non-math pixels only. This prevents the recognizer's garbled
+    # rendering of an equation from being duplicated beside its LaTeX token.
+    text_only_image = image.copy()
+    page_height, page_width = text_only_image.shape[:2]
+    for equation in equations:
+        pad = max(2, equation.height // 12)
+        left = max(0, equation.x - pad)
+        top = max(0, equation.y - pad)
+        right = min(page_width, equation.x + equation.width + pad)
+        bottom = min(page_height, equation.y + equation.height + pad)
+        text_only_image[top:bottom, left:right] = 255
+
+    text_result = extract_text_handwritten_image(
+        text_only_image,
+        confidence_threshold=text_confidence_threshold,
+        detect_mixed=detect_mixed,
+        deskew_page=False,
+    )
+    return MathAwareTextResult(
+        text=merge_equations_into_text(text_result.lines, equations),
+        equations=equations,
+        text_confidence=text_result.confidence,
+    )
+
+
 def _main() -> int:
     parser = argparse.ArgumentParser(
         description="Detect page equations and convert them to LaTeX"
     )
     parser.add_argument("--input", required=True, help="Path to an input page image")
+    parser.add_argument(
+        "--with-text",
+        action="store_true",
+        help="OCR the page and embed equations into the extracted text",
+    )
     args = parser.parse_args()
     try:
-        results = extract_equations(args.input)
+        if args.with_text:
+            page = extract_text_with_equations(args.input)
+            results = page.equations
+        else:
+            page = None
+            results = extract_equations(args.input)
     except (ValueError, RuntimeError) as exc:
         parser.error(str(exc))
     print(f"Equations detected: {len(results)}")
@@ -442,6 +581,9 @@ def _main() -> int:
             f"({equation.x}, {equation.y}, {equation.width}, {equation.height}): "
             f"{equation.latex}{flag}"
         )
+    if page is not None:
+        print("\nIntegrated text:")
+        print(page.text)
     return 0
 
 

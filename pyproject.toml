@@ -9,3 +9,6 @@ known_first_party = ["src", "tests"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+markers = [
+    "real_models: runs downloaded TrOCR and pix2tex checkpoints on CPU",
+]

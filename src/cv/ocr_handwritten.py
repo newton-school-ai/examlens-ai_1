@@ -317,11 +317,27 @@ def extract_text_handwritten(
     confidence_threshold: float | None = None,
     detect_mixed: bool = True,
 ) -> HandwrittenOCRResult:
-    """Extract ordered text lines from a handwritten or mixed document page."""
+    """Load a page and extract ordered handwritten or mixed text lines."""
     image = cv2.imread(os.fspath(image_path))
     if image is None:
         raise ValueError(f"Could not read image from {image_path}")
-    image = deskew(image)
+    return extract_text_handwritten_image(
+        image,
+        confidence_threshold=confidence_threshold,
+        detect_mixed=detect_mixed,
+    )
+
+
+def extract_text_handwritten_image(
+    image: np.ndarray,
+    confidence_threshold: float | None = None,
+    detect_mixed: bool = True,
+    deskew_page: bool = True,
+) -> HandwrittenOCRResult:
+    """Extract ordered text lines from an in-memory handwritten/mixed page."""
+    if image is None or image.size == 0:
+        raise ValueError("A non-empty image is required for handwritten OCR")
+    image = deskew(image) if deskew_page else image
     threshold = (
         settings.ocr_confidence_threshold
         if confidence_threshold is None

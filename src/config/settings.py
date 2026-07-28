@@ -50,7 +50,9 @@ class Settings(BaseSettings):
     ocr_languages: list[str] = ["en", "hi"]
 
     # Handwritten OCR
-    trocr_model: str = "microsoft/trocr-base-handwritten"
+    # The small checkpoint retains strong IAM handwriting accuracy while keeping
+    # CPU inference practical for the <15 second/page acceptance target.
+    trocr_model: str = "microsoft/trocr-small-handwritten"
 
     # Math extraction
     math_extractor: str = "pix2tex"
