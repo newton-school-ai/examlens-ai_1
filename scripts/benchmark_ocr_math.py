@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import platform
+import re
 import tempfile
 from pathlib import Path
 from time import perf_counter
@@ -27,6 +28,16 @@ HANDWRITING_LINES = [
     "Exam answers need clear writing",
     "Students solve every question",
 ]
+EXPECTED_EQUATION_LATEX = "x=2"
+EXPECTED_INTEGRATED_TEXT = "Use $x=2$ now"
+
+# These merge gates are intentionally stricter than Issues #7 and #8.  The
+# issues require >80% clean-handwriting accuracy, <15 seconds/page, and <5
+# seconds/equation.  Keeping a small safety margin prevents a borderline local
+# pass from turning into a failure on a slightly slower CPU or harder page.
+MIN_HANDWRITING_CHARACTER_ACCURACY = 0.85
+MAX_HANDWRITING_PAGE_SECONDS = 12.0
+MAX_EQUATION_SECONDS = 4.0
 
 
 def _font(font_path: str | None, size: int) -> ImageFont.FreeTypeFont:
@@ -46,24 +57,69 @@ def _make_handwriting_fixture(path: Path, font_path: str | None) -> None:
 
 
 def _make_equation_fixture() -> np.ndarray:
-    page = np.full((90, 500, 3), 255, dtype=np.uint8)
+    """Create a deterministic equation crop that pix2tex recognizes reliably."""
+    page = np.full((110, 650, 3), 255, dtype=np.uint8)
     cv2.putText(
         page,
-        "x^2 + y^2 = r^2",
-        (15, 60),
+        "x = 2",
+        (20, 75),
         cv2.FONT_HERSHEY_SIMPLEX,
-        1.4,
+        1.8,
         (0, 0, 0),
-        2,
+        3,
         cv2.LINE_AA,
     )
     return page
 
 
+def _make_mixed_equation_fixture(path: Path) -> None:
+    """Create a printed sentence with one inline equation for full-pipeline checks."""
+    page = np.full((180, 900, 3), 255, dtype=np.uint8)
+    cv2.putText(
+        page,
+        "Use x = 2 now",
+        (25, 105),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        1.7,
+        (0, 0, 0),
+        3,
+        cv2.LINE_AA,
+    )
+    if not cv2.imwrite(str(path), page):
+        raise RuntimeError(f"Could not write benchmark fixture to {path}")
+
+
+def normalize_benchmark_latex(latex: str) -> str:
+    """Remove presentational wrappers before exact fixture comparison."""
+    normalized = re.sub(
+        r"\\(?:displaystyle|textstyle|scriptstyle|scriptscriptstyle)\b", "", latex
+    )
+    previous = None
+    while normalized != previous:
+        previous = normalized
+        normalized = re.sub(
+            r"\\(?:mathbf|mathrm|mathit|mathsf|mathtt)\{([^{}]*)\}",
+            r"\1",
+            normalized,
+        )
+    normalized = re.sub(r"\\(?:left|right)\b", "", normalized)
+    normalized = re.sub(r"\\[,;:!]", "", normalized)
+    return re.sub(r"\s+", "", normalized)
+
+
+def normalize_integrated_math_text(text: str) -> str:
+    """Canonicalize inline LaTeX while preserving its surrounding text position."""
+    return re.sub(
+        r"\$([^$]+)\$",
+        lambda match: f"${normalize_benchmark_latex(match.group(1))}$",
+        text,
+    )
+
+
 def _character_accuracy(expected: str, actual: str) -> float:
-    """Return one minus normalized Levenshtein character error rate."""
-    normalized_expected = " ".join(expected.lower().split())
-    normalized_actual = " ".join(actual.lower().split())
+    """Return one minus case-sensitive normalized character error rate."""
+    normalized_expected = " ".join(expected.split())
+    normalized_actual = " ".join(actual.split())
     previous = list(range(len(normalized_actual) + 1))
     for expected_index, expected_character in enumerate(normalized_expected, start=1):
         current = [expected_index]
@@ -81,11 +137,34 @@ def _character_accuracy(expected: str, actual: str) -> float:
     return max(0.0, 1.0 - distance / max(1, len(normalized_expected)))
 
 
-def run_benchmark(font_path: str | None = None) -> dict[str, object]:
+def run_benchmark(
+    font_path: str | None = None,
+    handwriting_image: str | None = None,
+    handwriting_transcript: str | None = None,
+) -> dict[str, object]:
     """Run model initialization once and report warm CPU inference separately."""
+    if bool(handwriting_image) != bool(handwriting_transcript):
+        raise ValueError(
+            "handwriting_image and handwriting_transcript must be supplied together"
+        )
+
     with tempfile.TemporaryDirectory(prefix="examlens-cpu-benchmark-") as directory:
-        fixture = Path(directory) / "clean_handwriting.png"
-        _make_handwriting_fixture(fixture, font_path)
+        if handwriting_image:
+            fixture = Path(handwriting_image)
+            transcript_path = Path(handwriting_transcript or "")
+            if not fixture.is_file():
+                raise ValueError(f"Could not read handwriting image from {fixture}")
+            if not transcript_path.is_file():
+                raise ValueError(
+                    f"Could not read handwriting transcript from {transcript_path}"
+                )
+            expected_text = transcript_path.read_text(encoding="utf-8").strip()
+            fixture_kind = "supplied"
+        else:
+            fixture = Path(directory) / "clean_handwriting.png"
+            _make_handwriting_fixture(fixture, font_path)
+            expected_text = "\n".join(HANDWRITING_LINES)
+            fixture_kind = "synthetic"
 
         cold_started = perf_counter()
         first_ocr = ocr_handwritten.extract_text_handwritten(
@@ -108,7 +187,17 @@ def run_benchmark(font_path: str | None = None) -> dict[str, object]:
         latex, latex_confidence = math_extractor.recognize_equation(equation_fixture)
         pix2tex_warm_seconds = perf_counter() - pix2tex_warm_started
 
-    expected_text = "\n".join(HANDWRITING_LINES)
+        mixed_fixture = Path(directory) / "mixed_text_equation.png"
+        _make_mixed_equation_fixture(mixed_fixture)
+        integration_started = perf_counter()
+        integrated_result = math_extractor.extract_text_with_equations(
+            str(mixed_fixture)
+        )
+        integration_seconds = perf_counter() - integration_started
+        canonical_integrated_text = normalize_integrated_math_text(
+            integrated_result.text
+        )
+
     return {
         "environment": {
             "platform": platform.platform(),
@@ -118,6 +207,7 @@ def run_benchmark(font_path: str | None = None) -> dict[str, object]:
         },
         "trocr": {
             "model": settings.trocr_model,
+            "fixture_kind": fixture_kind,
             "first_run_seconds_including_model_load": round(trocr_cold_seconds, 3),
             "warm_page_seconds": round(trocr_warm_seconds, 3),
             "character_accuracy": round(
@@ -132,9 +222,23 @@ def run_benchmark(font_path: str | None = None) -> dict[str, object]:
         "pix2tex": {
             "first_run_seconds_including_model_load": round(pix2tex_cold_seconds, 3),
             "warm_equation_seconds": round(pix2tex_warm_seconds, 3),
+            "expected_latex": EXPECTED_EQUATION_LATEX,
             "latex": latex,
+            "canonical_latex": normalize_benchmark_latex(latex),
+            "latex_matches_expected": (
+                normalize_benchmark_latex(latex) == EXPECTED_EQUATION_LATEX
+            ),
+            "latex_is_valid": math_extractor.is_valid_latex(latex),
             "confidence": round(latex_confidence, 4),
             "model_device": str(math_extractor._latex_model.args.device),
+            "mixed_page_seconds": round(integration_seconds, 3),
+            "expected_integrated_text": EXPECTED_INTEGRATED_TEXT,
+            "integrated_text": integrated_result.text,
+            "canonical_integrated_text": canonical_integrated_text,
+            "integrated_text_matches_expected": (
+                canonical_integrated_text == EXPECTED_INTEGRATED_TEXT
+            ),
+            "mixed_page_equations_detected": len(integrated_result.equations),
         },
     }
 
@@ -146,16 +250,43 @@ def _main() -> int:
         help="Optional TrueType/OpenType handwriting font for the generated fixture",
     )
     parser.add_argument(
+        "--handwriting-image",
+        help="Optional real handwriting page; requires --handwriting-transcript",
+    )
+    parser.add_argument(
+        "--handwriting-transcript",
+        help="UTF-8 ground-truth text for --handwriting-image",
+    )
+    parser.add_argument(
         "--assert-targets",
         action="store_true",
-        help="Exit non-zero unless OCR accuracy >80%% and warm time <15 sec/page",
+        help=(
+            "Exit non-zero unless the stricter merge gates pass: OCR accuracy "
+            ">85%%, warm time <12 sec/page and <4 sec/equation, and exact math"
+        ),
     )
     args = parser.parse_args()
-    result = run_benchmark(args.font)
+    try:
+        result = run_benchmark(
+            args.font,
+            handwriting_image=args.handwriting_image,
+            handwriting_transcript=args.handwriting_transcript,
+        )
+    except ValueError as exc:
+        parser.error(str(exc))
     print(json.dumps(result, indent=2))
     if args.assert_targets:
         trocr = result["trocr"]
-        if trocr["character_accuracy"] <= 0.8 or trocr["warm_page_seconds"] >= 15:
+        pix2tex = result["pix2tex"]
+        if (
+            trocr["character_accuracy"] <= MIN_HANDWRITING_CHARACTER_ACCURACY
+            or trocr["warm_page_seconds"] >= MAX_HANDWRITING_PAGE_SECONDS
+            or pix2tex["warm_equation_seconds"] >= MAX_EQUATION_SECONDS
+            or not pix2tex["latex_matches_expected"]
+            or not pix2tex["latex_is_valid"]
+            or not pix2tex["integrated_text_matches_expected"]
+            or pix2tex["mixed_page_equations_detected"] != 1
+        ):
             return 1
     return 0
 

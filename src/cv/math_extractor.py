@@ -23,9 +23,147 @@ except ImportError:  # pragma: no cover - exercised only in minimal installation
 _latex_model: Any | None = None
 
 MATH_TOKEN = re.compile(
-    r"(?:[=+\-*/^<>≤≥±×÷∫∑√∞πθαβγ∆]|\b(?:sin|cos|tan|log|lim)\b|\d+[/^]\d+)",
+    r"(?:^(?:[=+*/^<>≤≥±×÷])$"
+    r"|[∫∑√∞πθαβγδ∆λμσΣΩ]"
+    r"|\b(?:sin|cos|tan|log|lim)\b"
+    r"|\b\d+(?:\.\d+)?\s*[-/^]\s*[A-Za-z0-9]"
+    r"|\b[A-Za-z]\s*[-/^]\s*\d+\b"
+    r"|\b[A-Za-z0-9]\s*[=+*<>]\s*[A-Za-z0-9]\b)",
     re.IGNORECASE,
 )
+
+STANDALONE_OPERATOR = re.compile(r"^[=+*/^<>≤≥±×÷]$")
+MATH_OPERAND = re.compile(r"^(?:[A-Za-z]|\d+(?:\.\d+)?|[A-Za-z]\w*[\^_]\w+|\([^)]*\))$")
+
+KATEX_COMMANDS = {
+    "Delta",
+    "Gamma",
+    "Lambda",
+    "Omega",
+    "Phi",
+    "Pi",
+    "Psi",
+    "Sigma",
+    "Theta",
+    "alpha",
+    "approx",
+    "array",
+    "bar",
+    "begin",
+    "beta",
+    "bf",
+    "binom",
+    "cal",
+    "cdot",
+    "chi",
+    "cos",
+    "cot",
+    "csc",
+    "ddot",
+    "delta",
+    "det",
+    "dfrac",
+    "displaystyle",
+    "div",
+    "dot",
+    "exp",
+    "ell",
+    "end",
+    "epsilon",
+    "eta",
+    "exists",
+    "forall",
+    "frac",
+    "gamma",
+    "ge",
+    "geq",
+    "hat",
+    "in",
+    "infty",
+    "int",
+    "kappa",
+    "lambda",
+    "le",
+    "left",
+    "leq",
+    "lim",
+    "limits",
+    "ln",
+    "log",
+    "longrightarrow",
+    "mathbb",
+    "mathbf",
+    "mathcal",
+    "mathit",
+    "mathfrak",
+    "mathrm",
+    "mathsf",
+    "mathtt",
+    "mu",
+    "max",
+    "min",
+    "nabla",
+    "neq",
+    "notin",
+    "nolimits",
+    "nu",
+    "omega",
+    "operatorname",
+    "overline",
+    "overbrace",
+    "overset",
+    "partial",
+    "phi",
+    "pi",
+    "pm",
+    "prod",
+    "psi",
+    "rho",
+    "right",
+    "sec",
+    "scriptstyle",
+    "scriptscriptstyle",
+    "sigma",
+    "sin",
+    "sqrt",
+    "stackrel",
+    "substack",
+    "sum",
+    "tan",
+    "tau",
+    "text",
+    "textstyle",
+    "tfrac",
+    "theta",
+    "times",
+    "to",
+    "underline",
+    "underbrace",
+    "underset",
+    "upsilon",
+    "varepsilon",
+    "varphi",
+    "varpi",
+    "varrho",
+    "varsigma",
+    "vartheta",
+    "vec",
+    "xi",
+    "zeta",
+}
+
+KATEX_ENVIRONMENTS = {
+    "aligned",
+    "array",
+    "bmatrix",
+    "cases",
+    "gathered",
+    "matrix",
+    "pmatrix",
+    "smallmatrix",
+    "Vmatrix",
+    "vmatrix",
+}
 
 
 class EquationRegion(BaseModel):
@@ -67,6 +205,10 @@ def get_latex_model() -> Any:
                 "dependencies with `pip install -r requirements.txt`."
             ) from exc
         _latex_model = LatexOCR()
+        # pix2tex defaults to temperature-based multinomial sampling. OCR must
+        # be reproducible, so use a near-greedy temperature that makes repeated
+        # inference on the same crop stable while preserving the upstream API.
+        _latex_model.args.temperature = 0.01
     return _latex_model
 
 
@@ -117,11 +259,25 @@ def _ocr_math_regions(image: np.ndarray) -> list[EquationRegion]:
         )
         by_line.setdefault(key, []).append(index)
 
+    page_height, page_width = image.shape[:2]
     regions: list[EquationRegion] = []
     for indices in by_line.values():
-        math_indices = [
-            index for index in indices if MATH_TOKEN.search(data["text"][index])
-        ]
+        math_indices = []
+        for position, index in enumerate(indices):
+            text = data["text"][index].strip()
+            if not MATH_TOKEN.search(text) or float(data["conf"][index]) <= 0:
+                continue
+            if STANDALONE_OPERATOR.fullmatch(text):
+                if position == 0 or position == len(indices) - 1:
+                    continue
+                previous_text = data["text"][indices[position - 1]].strip()
+                next_text = data["text"][indices[position + 1]].strip()
+                if not (
+                    MATH_OPERAND.fullmatch(previous_text)
+                    and MATH_OPERAND.fullmatch(next_text)
+                ):
+                    continue
+            math_indices.append(index)
         if not math_indices:
             continue
         # Include one neighbouring token so "x = 2" is not cropped to "=".
@@ -136,6 +292,13 @@ def _ocr_math_regions(image: np.ndarray) -> list[EquationRegion]:
         bottom = max(
             int(data["top"][index]) + int(data["height"][index]) for index in selected
         )
+        region_width = right - left
+        region_height = bottom - top
+        if (
+            region_height > page_height * 0.35
+            or region_width * region_height > page_width * page_height * 0.20
+        ):
+            continue
         mean_confidence = np.mean(
             [max(0.0, float(data["conf"][index])) for index in math_indices]
         )
@@ -143,8 +306,8 @@ def _ocr_math_regions(image: np.ndarray) -> list[EquationRegion]:
             EquationRegion(
                 x=left,
                 y=top,
-                width=right - left,
-                height=bottom - top,
+                width=region_width,
+                height=region_height,
                 detection_confidence=min(0.98, 0.65 + mean_confidence / 300),
                 inline=len(math_indices) < len(indices),
             )
@@ -184,10 +347,12 @@ def _visual_math_score(mask: np.ndarray, box: tuple[int, int, int, int]) -> floa
 def _structural_math_regions(mask: np.ndarray) -> list[EquationRegion]:
     """Group stacked fractions and bracketed matrices before line detection."""
     count, _, stats, _ = cv2.connectedComponentsWithStats(mask, 8)
+    minimum_component_area = max(4, mask.size // 500_000)
     components = [
         stats[index]
         for index in range(1, count)
-        if stats[index, cv2.CC_STAT_AREA] >= 3 and stats[index, cv2.CC_STAT_HEIGHT] >= 2
+        if stats[index, cv2.CC_STAT_AREA] >= minimum_component_area
+        and stats[index, cv2.CC_STAT_HEIGHT] >= 3
     ]
     if not components:
         return []
@@ -206,7 +371,11 @@ def _structural_math_regions(mask: np.ndarray) -> list[EquationRegion]:
     )
     for contour in contours:
         x, y, width, height = cv2.boundingRect(contour)
-        if width < max(14, typical_height * 1.2) or width > page_width * 0.75:
+        if (
+            width < max(20, typical_height * 5)
+            or width > page_width * 0.75
+            or height > max(4, typical_height * 0.35)
+        ):
             continue
         vertical_reach = round(max(20, typical_height * 3))
         side_padding = round(max(8, typical_height))
@@ -214,55 +383,122 @@ def _structural_math_regions(mask: np.ndarray) -> list[EquationRegion]:
         right = min(page_width, x + width + side_padding)
         top = max(0, y - vertical_reach)
         bottom = min(page_height, y + height + vertical_reach)
-        if not (
-            np.any(mask[top:y, left:right])
-            and np.any(mask[y + height : bottom, left:right])
-        ):
+        above_window = mask[top:y, x : x + width]
+        below_window = mask[y + height : bottom, x : x + width]
+        above_ink = np.count_nonzero(above_window)
+        below_ink = np.count_nonzero(below_window)
+        minimum_neighbour_ink = max(8, round(width * 0.12))
+        if above_ink < minimum_neighbour_ink or below_ink < minimum_neighbour_ink:
+            continue
+        above_columns = np.flatnonzero(np.any(above_window > 0, axis=0))
+        below_columns = np.flatnonzero(np.any(below_window > 0, axis=0))
+        if above_columns.size == 0 or below_columns.size == 0:
+            continue
+        overlap_width = max(
+            0,
+            min(int(above_columns.max()), int(below_columns.max()))
+            - max(int(above_columns.min()), int(below_columns.min())),
+        )
+        smaller_span = min(
+            int(above_columns.max() - above_columns.min() + 1),
+            int(below_columns.max() - below_columns.min() + 1),
+        )
+        if overlap_width / max(1, smaller_span) < 0.30:
             continue
         points_y, points_x = np.where(mask[top:bottom, left:right] > 0)
         region_left = left + int(points_x.min())
         region_top = top + int(points_y.min())
         region_right = left + int(points_x.max()) + 1
         region_bottom = top + int(points_y.max()) + 1
+        region_width = region_right - region_left
+        region_height = region_bottom - region_top
+        if region_width > typical_height * 12 or region_height > typical_height * 7:
+            continue
         regions.append(
             EquationRegion(
                 x=region_left,
                 y=region_top,
-                width=region_right - region_left,
-                height=region_bottom - region_top,
+                width=region_width,
+                height=region_height,
                 detection_confidence=0.82,
                 inline=False,
             )
         )
 
-    # Tall narrow strokes with neighbouring multi-row content commonly belong
-    # to matrix brackets or integral signs.
+    # Matrices have a pair of similarly tall, narrow brackets surrounding
+    # multi-row content. Requiring the pair avoids treating ordinary ascenders,
+    # page borders, or table rules as equations.
+    tall_components = []
     for component in components:
-        x = int(component[cv2.CC_STAT_LEFT])
-        y = int(component[cv2.CC_STAT_TOP])
         width = int(component[cv2.CC_STAT_WIDTH])
         height = int(component[cv2.CC_STAT_HEIGHT])
-        if height < typical_height * 2.2 or width > max(8, height * 0.35):
-            continue
-        reach = round(max(height * 3, typical_height * 8))
-        left, right = max(0, x - reach), min(page_width, x + width + reach)
-        top, bottom = max(0, y - 3), min(page_height, y + height + 3)
-        local = mask[top:bottom, left:right]
-        row_ink = np.count_nonzero(local, axis=1)
-        occupied_rows = np.count_nonzero(row_ink > max(1, local.shape[1] * 0.01))
-        if occupied_rows < height * 0.45:
-            continue
-        points_y, points_x = np.where(local > 0)
-        regions.append(
-            EquationRegion(
-                x=left + int(points_x.min()),
-                y=top + int(points_y.min()),
-                width=int(points_x.max() - points_x.min() + 1),
-                height=int(points_y.max() - points_y.min() + 1),
-                detection_confidence=0.68,
-                inline=False,
+        if height >= typical_height * 3 and width <= max(10, height * 0.35):
+            tall_components.append(component)
+
+    for index, first in enumerate(tall_components):
+        first_y = int(first[cv2.CC_STAT_TOP])
+        first_width = int(first[cv2.CC_STAT_WIDTH])
+        first_height = int(first[cv2.CC_STAT_HEIGHT])
+        for second in tall_components[index + 1 :]:
+            second_y = int(second[cv2.CC_STAT_TOP])
+            second_width = int(second[cv2.CC_STAT_WIDTH])
+            second_height = int(second[cv2.CC_STAT_HEIGHT])
+            vertical_overlap = max(
+                0,
+                min(first_y + first_height, second_y + second_height)
+                - max(first_y, second_y),
             )
-        )
+            if vertical_overlap / min(first_height, second_height) < 0.75:
+                continue
+            if (
+                max(first_height, second_height) / min(first_height, second_height)
+                > 1.4
+            ):
+                continue
+
+            left_component, right_component = sorted(
+                (first, second), key=lambda item: item[cv2.CC_STAT_LEFT]
+            )
+            left = int(left_component[cv2.CC_STAT_LEFT])
+            right = int(
+                right_component[cv2.CC_STAT_LEFT] + right_component[cv2.CC_STAT_WIDTH]
+            )
+            if not typical_height * 2 <= right - left <= page_width * 0.65:
+                continue
+            top = max(0, min(first_y, second_y) - 3)
+            bottom = min(
+                page_height,
+                max(first_y + first_height, second_y + second_height) + 3,
+            )
+            local = mask[top:bottom, left:right]
+            local_count, _, local_stats, _ = cv2.connectedComponentsWithStats(local, 8)
+            inner_components = [
+                item
+                for item in local_stats[1:local_count]
+                if item[cv2.CC_STAT_AREA] >= minimum_component_area
+                and item[cv2.CC_STAT_LEFT] > first_width
+                and item[cv2.CC_STAT_LEFT] + item[cv2.CC_STAT_WIDTH]
+                < local.shape[1] - second_width
+            ]
+            if len(inner_components) < 4:
+                continue
+            inner_centres = [
+                item[cv2.CC_STAT_TOP] + item[cv2.CC_STAT_HEIGHT] / 2
+                for item in inner_components
+            ]
+            if max(inner_centres) - min(inner_centres) < typical_height:
+                continue
+            regions.append(
+                EquationRegion(
+                    x=left,
+                    y=top,
+                    width=right - left,
+                    height=bottom - top,
+                    detection_confidence=0.78,
+                    inline=False,
+                )
+            )
+            break
     return regions
 
 
@@ -309,7 +545,7 @@ def detect_equation_regions(
     candidates = _ocr_math_regions(image) + _structural_math_regions(mask)
     for box in _line_regions(mask):
         score = _visual_math_score(mask, box)
-        if score >= min_confidence:
+        if score >= max(min_confidence, 0.82):
             x, y, width, height = box
             candidates.append(
                 EquationRegion(
@@ -321,10 +557,15 @@ def detect_equation_regions(
                     inline=False,
                 )
             )
+    page_height, page_width = image.shape[:2]
     return [
         region
         for region in _merge_regions(candidates)
         if region.detection_confidence >= min_confidence
+        and region.width * region.height <= page_width * page_height * 0.50
+        and not (
+            region.width >= page_width * 0.90 and region.height >= page_height * 0.20
+        )
     ]
 
 
@@ -341,23 +582,55 @@ def normalize_latex(latex: str) -> str:
 
 
 def is_valid_latex(latex: str) -> bool:
-    """Perform a fast structural check suitable before KaTeX rendering."""
+    """Perform a conservative structural and KaTeX-command compatibility check."""
     if not latex or "\x00" in latex:
         return False
     depth = 0
-    escaped = False
-    for char in latex:
-        if char == "\\":
-            escaped = not escaped
-            continue
+    unescaped_dollars = 0
+    for index, char in enumerate(latex):
+        backslashes = 0
+        cursor = index - 1
+        while cursor >= 0 and latex[cursor] == "\\":
+            backslashes += 1
+            cursor -= 1
+        escaped = backslashes % 2 == 1
         if char == "{" and not escaped:
             depth += 1
         elif char == "}" and not escaped:
             depth -= 1
             if depth < 0:
                 return False
-        escaped = False
-    return depth == 0 and latex.count(r"\begin{") == latex.count(r"\end{")
+        elif char == "$" and not escaped:
+            unescaped_dollars += 1
+    if depth != 0 or unescaped_dollars:
+        return False
+
+    environment_stack: list[str] = []
+    for match in re.finditer(r"\\(begin|end)\{([A-Za-z*]+)\}", latex):
+        action, environment = match.groups()
+        if environment not in KATEX_ENVIRONMENTS:
+            return False
+        if action == "begin":
+            environment_stack.append(environment)
+        elif not environment_stack or environment_stack.pop() != environment:
+            return False
+    if environment_stack:
+        return False
+
+    commands = set(re.findall(r"\\([A-Za-z]+)", latex))
+    if not commands.issubset(KATEX_COMMANDS):
+        return False
+    delimiter_depth = 0
+    for match in re.finditer(r"\\(left|right)\b", latex):
+        if match.group(1) == "left":
+            delimiter_depth += 1
+        elif delimiter_depth == 0:
+            return False
+        else:
+            delimiter_depth -= 1
+    if delimiter_depth:
+        return False
+    return True
 
 
 def _latex_quality(latex: str) -> float:
@@ -533,11 +806,12 @@ def extract_text_with_equations(
     text_only_image = image.copy()
     page_height, page_width = text_only_image.shape[:2]
     for equation in equations:
-        pad = max(2, equation.height // 12)
-        left = max(0, equation.x - pad)
-        top = max(0, equation.y - pad)
-        right = min(page_width, equation.x + equation.width + pad)
-        bottom = min(page_height, equation.y + equation.height + pad)
+        pad_x = max(4, equation.height // 4)
+        pad_y = max(2, equation.height // 12)
+        left = max(0, equation.x - pad_x)
+        top = max(0, equation.y - pad_y)
+        right = min(page_width, equation.x + equation.width + pad_x)
+        bottom = min(page_height, equation.y + equation.height + pad_y)
         text_only_image[top:bottom, left:right] = 255
 
     text_result = extract_text_handwritten_image(

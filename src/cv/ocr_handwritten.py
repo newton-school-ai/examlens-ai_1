@@ -97,6 +97,92 @@ def _foreground_mask(image: np.ndarray) -> np.ndarray:
     return cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)[1]
 
 
+def _remove_page_rules(mask: np.ndarray, aggressive: bool = False) -> np.ndarray:
+    """Remove long notebook/table rules without erasing normal character strokes."""
+    horizontal_kernel = cv2.getStructuringElement(
+        cv2.MORPH_RECT, (max(30, mask.shape[1] // 12), 1)
+    )
+    vertical_kernel = cv2.getStructuringElement(
+        cv2.MORPH_RECT,
+        (
+            1,
+            max(30, mask.shape[0] // 12) if aggressive else max(80, mask.shape[0] // 6),
+        ),
+    )
+    horizontal = cv2.morphologyEx(mask, cv2.MORPH_OPEN, horizontal_kernel)
+    vertical = cv2.morphologyEx(mask, cv2.MORPH_OPEN, vertical_kernel)
+    return cv2.subtract(mask, cv2.bitwise_or(horizontal, vertical))
+
+
+def _projection_line_regions(
+    mask: np.ndarray, original_width: int, original_height: int
+) -> list[LineRegion]:
+    """Split connected cursive/grid pages at stable horizontal ink peaks."""
+    row_density = np.count_nonzero(mask, axis=1).astype(np.float32) / max(
+        1, mask.shape[1]
+    )
+    kernel_height = max(7, round(mask.shape[0] / 65))
+    if kernel_height % 2 == 0:
+        kernel_height += 1
+    smoothed = cv2.GaussianBlur(
+        row_density.reshape(-1, 1), (1, kernel_height), 0
+    ).ravel()
+    if not np.any(smoothed):
+        return []
+
+    peak_threshold = max(0.01, float(smoothed.max()) * 0.25)
+    candidates = [
+        index
+        for index in range(1, len(smoothed) - 1)
+        if smoothed[index] >= smoothed[index - 1]
+        and smoothed[index] > smoothed[index + 1]
+        and smoothed[index] >= peak_threshold
+    ]
+    minimum_distance = max(12, mask.shape[0] // 25)
+    selected: list[int] = []
+    for index in sorted(candidates, key=lambda item: smoothed[item], reverse=True):
+        if all(abs(index - existing) >= minimum_distance for existing in selected):
+            selected.append(index)
+    selected.sort()
+    if not selected:
+        return []
+
+    if len(selected) == 1:
+        half_gap = max(8, mask.shape[0] // 20)
+        boundaries = [selected[0] - half_gap, selected[0] + half_gap]
+    else:
+        typical_gap = int(np.median(np.diff(selected)))
+        boundaries = [selected[0] - typical_gap // 2]
+        boundaries.extend(
+            (first + second) // 2 for first, second in zip(selected, selected[1:])
+        )
+        boundaries.append(selected[-1] + typical_gap // 2)
+
+    scale_x = original_width / mask.shape[1]
+    scale_y = original_height / mask.shape[0]
+    regions: list[LineRegion] = []
+    for index in range(len(selected)):
+        top = max(0, boundaries[index])
+        bottom = min(mask.shape[0], boundaries[index + 1])
+        band = mask[top:bottom]
+        points_y, points_x = np.where(band > 0)
+        if points_x.size == 0:
+            continue
+        left = int(np.percentile(points_x, 1))
+        right = int(np.percentile(points_x, 99)) + 1
+        if right - left < max(12, mask.shape[1] // 100):
+            continue
+        regions.append(
+            LineRegion(
+                x=round(left * scale_x),
+                y=round(top * scale_y),
+                width=max(1, round((right - left) * scale_x)),
+                height=max(1, round((bottom - top) * scale_y)),
+            )
+        )
+    return regions
+
+
 def _merge_line_boxes(
     boxes: list[tuple[int, int, int, int]], image_width: int
 ) -> list[LineRegion]:
@@ -143,11 +229,8 @@ def segment_text_lines(image: np.ndarray) -> list[LineRegion]:
     scale_x = original_width / mask.shape[1]
     scale_y = original_height / mask.shape[0]
 
-    # Remove page/table rules before joining characters into word contours.
-    horizontal_size = max(30, mask.shape[1] // 12)
-    horizontal_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (horizontal_size, 1))
-    rules = cv2.morphologyEx(mask, cv2.MORPH_OPEN, horizontal_kernel)
-    clean = cv2.subtract(mask, rules)
+    # Remove notebook/table rules before joining characters into word contours.
+    clean = _remove_page_rules(mask)
 
     join_width = max(12, mask.shape[1] // 80)
     joined = cv2.dilate(
@@ -169,7 +252,18 @@ def segment_text_lines(image: np.ndarray) -> list[LineRegion]:
                     round(height * scale_y),
                 )
             )
-    return _merge_line_boxes(boxes, original_width)
+    contour_regions = _merge_line_boxes(boxes, original_width)
+    suspiciously_tall = any(
+        region.height > original_height * 0.25 for region in contour_regions
+    )
+    if suspiciously_tall:
+        projection_mask = _remove_page_rules(mask, aggressive=True)
+        projection_regions = _projection_line_regions(
+            projection_mask, original_width, original_height
+        )
+        if len(projection_regions) > len(contour_regions):
+            return projection_regions
+    return contour_regions
 
 
 def _crop_line(image: np.ndarray, region: LineRegion) -> np.ndarray:
@@ -180,6 +274,46 @@ def _crop_line(image: np.ndarray, region: LineRegion) -> np.ndarray:
     right = min(page_width, region.x + region.width + pad_x)
     bottom = min(page_height, region.y + region.height + pad_y)
     return image[top:bottom, left:right]
+
+
+def _prepare_handwritten_crop(line_image: np.ndarray) -> np.ndarray:
+    """Suppress ruled-paper backgrounds and tightly crop dark handwriting."""
+    gray = (
+        cv2.cvtColor(line_image, cv2.COLOR_BGR2GRAY)
+        if line_image.ndim == 3
+        else line_image
+    )
+    blurred = cv2.GaussianBlur(gray, (3, 3), 0)
+    otsu_threshold, _ = cv2.threshold(
+        blurred, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU
+    )
+    ink_threshold = int(np.clip(otsu_threshold * 0.7, 75, 125))
+    ink = cv2.threshold(gray, ink_threshold, 255, cv2.THRESH_BINARY_INV)[1]
+
+    horizontal = cv2.morphologyEx(
+        ink,
+        cv2.MORPH_OPEN,
+        cv2.getStructuringElement(cv2.MORPH_RECT, (max(20, ink.shape[1] // 8), 1)),
+    )
+    vertical = cv2.morphologyEx(
+        ink,
+        cv2.MORPH_OPEN,
+        cv2.getStructuringElement(cv2.MORPH_RECT, (1, max(12, ink.shape[0] // 2))),
+    )
+    ink = cv2.subtract(ink, cv2.bitwise_or(horizontal, vertical))
+
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(ink, 8)
+    cleaned = np.zeros_like(ink)
+    for index in range(1, count):
+        if stats[index, cv2.CC_STAT_AREA] >= 4:
+            cleaned[labels == index] = 255
+
+    _, points_x = np.where(cleaned > 0)
+    if points_x.size:
+        left = max(0, int(np.percentile(points_x, 1)) - 10)
+        right = min(cleaned.shape[1], int(np.percentile(points_x, 99)) + 11)
+        cleaned = cleaned[:, left:right]
+    return cv2.cvtColor(255 - cleaned, cv2.COLOR_GRAY2BGR)
 
 
 def _printed_ocr(line_image: np.ndarray) -> tuple[str, float]:
@@ -216,6 +350,16 @@ def _print_regularity(line_image: np.ndarray) -> float:
     ]
     if len(components) < 3:
         return 0.0
+    median_height = float(
+        np.median([item[0][cv2.CC_STAT_HEIGHT] for item in components])
+    )
+    components = [
+        item
+        for item in components
+        if item[0][cv2.CC_STAT_HEIGHT] >= max(3, median_height * 0.45)
+    ]
+    if len(components) < 3:
+        return 0.0
     heights = np.array(
         [item[0][cv2.CC_STAT_HEIGHT] for item in components], dtype=float
     )
@@ -237,7 +381,7 @@ def classify_text_line(
     regularity = _print_regularity(line_image)
     return (
         "printed"
-        if printed_confidence >= 0.82 and regularity >= 0.42
+        if printed_confidence >= 0.82 and regularity >= 0.82
         else "handwritten"
     )
 
@@ -281,10 +425,8 @@ def recognize_handwritten_lines(
         batch = line_images[start : start + batch_size]
         pil_images = []
         for line_image in batch:
-            if line_image.ndim == 2:
-                rgb = cv2.cvtColor(line_image, cv2.COLOR_GRAY2RGB)
-            else:
-                rgb = cv2.cvtColor(line_image, cv2.COLOR_BGR2RGB)
+            prepared = _prepare_handwritten_crop(line_image)
+            rgb = cv2.cvtColor(prepared, cv2.COLOR_BGR2RGB)
             pil_images.append(Image.fromarray(rgb))
         pixel_values = processor(
             images=pil_images, return_tensors="pt"

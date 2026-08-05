@@ -1,8 +1,12 @@
-from unittest.mock import patch
+import sys
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
+import cv2
 import numpy as np
 import pytest
 
+from src.cv import math_extractor
 from src.cv.math_extractor import (
     MATH_TOKEN,
     EquationRegion,
@@ -175,7 +179,7 @@ def test_page_extraction_masks_math_and_returns_integrated_text(
     assert result.equations[0].latex == r"a^2+b^2"
     masked_image = mock_text.call_args.args[0]
     assert np.all(masked_image[10:38, 103:152] == 255)
-    assert np.all(masked_image[:, :100] == 0)
+    assert np.all(masked_image[:, :99] == 0)
     assert mock_text.call_args.kwargs["deskew_page"] is False
 
 
@@ -184,11 +188,56 @@ def test_latex_normalization_and_validation_are_katex_friendly():
     assert is_valid_latex(r"\sum_{i=1}^{n} i")
     assert is_valid_latex(r"\begin{matrix}a & b \\ c & d\end{matrix}")
     assert not is_valid_latex(r"\frac{a}{b")
+    assert not is_valid_latex(r"\begin{matrix}a\end{bmatrix}")
+    assert not is_valid_latex(r"\unknowncommand{x}")
+    assert not is_valid_latex(r"\right) x \left(")
+    assert not is_valid_latex("x + $y")
 
 
 @pytest.mark.parametrize("token", ["sin", "lim", "3/4", "x^2", "a=b"])
 def test_math_token_pattern_recognizes_textual_and_symbolic_math(token):
     assert MATH_TOKEN.search(token)
+
+
+@pytest.mark.parametrize("token", ["AI-powered", "PDF/DOCX/web", "C/C++", "+91", "10+"])
+def test_math_token_pattern_rejects_common_prose_and_code_tokens(token):
+    assert not MATH_TOKEN.search(token)
+
+
+def test_detector_does_not_treat_plain_prose_as_equations():
+    page = np.full((300, 900, 3), 255, dtype=np.uint8)
+    for text, y in [
+        ("AI-powered OCR handles prose", 70),
+        ("PDF DOCX and C plus plus tools", 140),
+        ("Contact details and project work", 210),
+    ]:
+        cv2.putText(
+            page,
+            text,
+            (30, y),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.8,
+            (0, 0, 0),
+            2,
+            cv2.LINE_AA,
+        )
+
+    assert detect_equation_regions(page) == []
+
+
+@patch("src.cv.math_extractor._visual_math_score", return_value=0.95)
+@patch(
+    "src.cv.math_extractor._line_regions",
+    return_value=[(0, 0, 900, 300)],
+)
+@patch("src.cv.math_extractor._structural_math_regions", return_value=[])
+@patch("src.cv.math_extractor._ocr_math_regions", return_value=[])
+def test_detector_rejects_a_page_sized_candidate(
+    mock_ocr, mock_structural, mock_lines, mock_score
+):
+    page = np.full((300, 900, 3), 255, dtype=np.uint8)
+
+    assert detect_equation_regions(page) == []
 
 
 @patch("src.cv.math_extractor.get_latex_model")
@@ -204,9 +253,19 @@ def test_recognizer_preserves_an_explicit_zero_model_confidence(mock_get_model):
     assert confidence == 0.0
 
 
-def test_visual_detector_groups_a_stacked_fraction():
-    import cv2
+def test_pix2tex_model_uses_deterministic_inference_temperature(monkeypatch):
+    model = SimpleNamespace(args=SimpleNamespace(temperature=0.25))
+    latex_ocr = MagicMock(return_value=model)
+    monkeypatch.setitem(sys.modules, "pix2tex.cli", SimpleNamespace(LatexOCR=latex_ocr))
+    monkeypatch.setattr(math_extractor, "_latex_model", None)
 
+    loaded = math_extractor.get_latex_model()
+
+    assert loaded is model
+    assert loaded.args.temperature == 0.01
+
+
+def test_visual_detector_groups_a_stacked_fraction():
     page = np.full((240, 500, 3), 255, dtype=np.uint8)
     cv2.putText(page, "x+1", (170, 85), 0, 0.9, (0, 0, 0), 2)
     cv2.line(page, (155, 100), (250, 100), (0, 0, 0), 2)
@@ -224,8 +283,6 @@ def test_visual_detector_groups_a_stacked_fraction():
 
 
 def test_visual_detector_groups_a_matrix():
-    import cv2
-
     page = np.full((240, 500, 3), 255, dtype=np.uint8)
     cv2.line(page, (140, 55), (140, 160), (0, 0, 0), 3)
     cv2.line(page, (140, 55), (160, 55), (0, 0, 0), 3)

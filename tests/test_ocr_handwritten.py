@@ -9,6 +9,7 @@ from src.cv import ocr_handwritten
 from src.cv.ocr_handwritten import (
     HandwrittenOCRResult,
     LineRegion,
+    classify_text_line,
     extract_text_handwritten,
     segment_text_lines,
 )
@@ -26,6 +27,67 @@ def test_line_segmentation_detects_clean_handwriting():
     assert len(lines) == 2
     assert lines[0].y < lines[1].y
     assert all(line.width > 200 and line.height > 15 for line in lines)
+
+
+def test_line_segmentation_ignores_notebook_grid_rules():
+    page = np.full((360, 800, 3), 255, dtype=np.uint8)
+    for x in range(0, page.shape[1], 30):
+        cv2.line(page, (x, 0), (x, page.shape[0] - 1), (190, 190, 190), 1)
+    for y in range(0, page.shape[0], 30):
+        cv2.line(page, (0, y), (page.shape[1] - 1, y), (190, 190, 190), 1)
+    for text, y in [
+        ("First clean line", 85),
+        ("Second clean line", 175),
+        ("Third clean line", 265),
+    ]:
+        cv2.putText(
+            page,
+            text,
+            (40, y),
+            cv2.FONT_HERSHEY_SCRIPT_SIMPLEX,
+            1.0,
+            (0, 0, 0),
+            2,
+            cv2.LINE_AA,
+        )
+
+    lines = segment_text_lines(page)
+
+    assert len(lines) == 3
+    assert [line.y for line in lines] == sorted(line.y for line in lines)
+
+
+def test_mixed_line_classifier_uses_glyph_regularity_not_tesseract_alone():
+    printed = np.full((90, 600, 3), 255, dtype=np.uint8)
+    cv2.putText(
+        printed,
+        "PRINTED TEXT",
+        (20, 60),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        1.2,
+        (0, 0, 0),
+        2,
+        cv2.LINE_AA,
+    )
+    irregular = np.full((100, 600, 3), 255, dtype=np.uint8)
+    offsets = [0, 9, -5, 13, -8, 4, 11, -3, 8, 0, 14]
+    scales = [1.0, 0.75, 1.25, 0.85, 1.15, 0.7, 1.3, 0.9, 1.1, 0.8, 1.2]
+    x = 20
+    for index, character in enumerate("HANDWRITING"):
+        cv2.putText(
+            irregular,
+            character,
+            (x, 65 + offsets[index]),
+            cv2.FONT_HERSHEY_SCRIPT_SIMPLEX,
+            scales[index],
+            (0, 0, 0),
+            2,
+            cv2.LINE_AA,
+        )
+        x += round(25 * scales[index])
+
+    assert classify_text_line(printed, printed_confidence=0.95) == "printed"
+    assert classify_text_line(irregular, printed_confidence=0.95) == "handwritten"
 
 
 def test_trocr_model_loads_on_cpu_and_is_cached(monkeypatch):
